@@ -863,3 +863,117 @@ after rollout. The local container test covers mapping, missing seeds, scoped
 profile writes, uploads, read state and persistence after UID-changing recreation,
 as well as both existing hosted authentication modes. Actual SCC/CSI/Route and
 browser behavior in the live cluster still require authorized Rahti validation.
+
+## Installing industry filters and job rankings
+
+This release adds only `job_openings` and two indexes to the existing database.
+The normal startup applies its `CREATE ... IF NOT EXISTS` schema; it never seeds
+jobs. An explicit, insert-only initializer creates 12 synthetic openings for
+existing companies 1–5 and up to six missing domain skills. Existing edited jobs,
+inactive jobs, candidates, all eight companies, skills, swipes, notifications and
+document BLOBs are retained. No new environment variable, container or resource
+is required. Do not apply replacement PVCs or run `backend.seed` during an update.
+The root README lists canonical industries, IDs, requirements and limitations.
+
+The commands below are for a **later authorized operator** and were not executed
+against Rahti. Use a quiet demo window so unrelated user writes do not invalidate
+before/after count comparisons. Verify the selected existing project first.
+
+1. Take an external SQLite backup using the SQLite backup API (not a live raw-file
+   copy). The default scratch volume is 64Mi; ensure there is enough space for a
+   snapshot, or use the larger/offline backup procedure described earlier.
+
+```sh
+oc project
+NS=$(oc project -q)
+umask 077
+mkdir -p backups
+BACKUP_FILE="backups/pre-jobs-$(date -u +%Y%m%dT%H%M%SZ).sqlite3"
+oc exec deployment/recruitifi -- python -c 'import os,sqlite3,tempfile,sys,shutil; src=sqlite3.connect("file:"+os.environ["TALENTMATCH_DB"]+"?mode=ro",uri=True); f=tempfile.NamedTemporaryFile(suffix=".sqlite3"); dst=sqlite3.connect(f.name); src.backup(dst); assert dst.execute("PRAGMA integrity_check").fetchone()[0]=="ok"; dst.close(); src.close(); f.seek(0); shutil.copyfileobj(f,sys.stdout.buffer)' > "$BACKUP_FILE.pending" \
+  && mv "$BACKUP_FILE.pending" "$BACKUP_FILE"
+python3 - "$BACKUP_FILE" <<'PY'
+import json, sqlite3, sys
+with sqlite3.connect('file:' + sys.argv[1] + '?mode=ro', uri=True) as db:
+    assert db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+    counts = {table: db.execute('SELECT count(*) FROM ' + table).fetchone()[0]
+              for table in ('candidates', 'companies', 'skills', 'swipe_decisions', 'notifications', 'profile_materials')}
+    counts['document_bytes'] = db.execute('SELECT COALESCE(sum(length(content)),0) FROM profile_materials').fetchone()[0]
+with open(sys.argv[1] + '.counts.json', 'x') as target:
+    json.dump(counts, target)
+print(counts)
+PY
+# Keep a verified protected copy in independent backup storage before proceeding.
+```
+
+2. Build and update the **existing** Deployment. Recreate restarts its single
+   replica and attaches the same PVC; startup creates the empty jobs table.
+
+```sh
+TAG="jobs-$(date -u +%Y%m%dT%H%M%SZ)"
+REGISTRY=image-registry.apps.2.rahti.csc.fi
+oc whoami -t | docker login --username unused --password-stdin "$REGISTRY"
+docker buildx build --platform linux/amd64 --push \
+  -t "$REGISTRY/$NS/recruitifi:$TAG" .
+oc set image deployment/recruitifi \
+  recruitifi="image-registry.openshift-image-registry.svc:5000/$NS/recruitifi:$TAG"
+oc rollout status deployment/recruitifi --timeout=180s
+oc logs deployment/recruitifi --tail=50
+```
+
+3. Initialize **only** the new synthetic job data. This is an explicit transaction
+   in the existing Pod, using its existing `/var/data/talentmatch.sqlite3`.
+   Repeating the command is safe: existing IDs and manual edits are never updated.
+   Failure for a missing base record or reserved-ID collision requires inspection,
+   not a base reseed. On failure, existing records are retained.
+
+```sh
+oc exec deployment/recruitifi -- python -m backend.seed_jobs
+# First initialization: Inserted 12 ... ; a repeated run: Inserted 0 ...
+oc exec deployment/recruitifi -- python -c 'from backend.database import connect; c=connect(); db=c.__enter__(); print("jobs:",db.execute("SELECT count(*) FROM job_openings").fetchone()[0]); print("industries:",[tuple(row) for row in db.execute("SELECT industry,count(*) FROM job_openings GROUP BY industry ORDER BY industry")]); assert db.execute("PRAGMA integrity_check").fetchone()[0]=="ok"; c.__exit__(None,None,None)'
+```
+
+4. Verify unchanged data counts. Skill count may increase by up to six; the old
+   skill rows are not modified. A standard fresh catalog grows from 40 to 46.
+   If visitors write during the window, investigate legitimate activity rather
+   than deleting records to force these comparisons to pass.
+
+```sh
+oc exec deployment/recruitifi -- python -c 'import json; from backend.database import connect; c=connect(); db=c.__enter__(); counts={t:db.execute("SELECT count(*) FROM "+t).fetchone()[0] for t in ("candidates","companies","skills","swipe_decisions","notifications","profile_materials")}; counts["document_bytes"]=db.execute("SELECT COALESCE(sum(length(content)),0) FROM profile_materials").fetchone()[0]; print(json.dumps(counts)); c.__exit__(None,None,None)' > "$BACKUP_FILE.after-counts.json"
+python3 - "$BACKUP_FILE" <<'PY'
+import json, sys
+from pathlib import Path
+before = json.loads(Path(sys.argv[1] + '.counts.json').read_text())
+after = json.loads(Path(sys.argv[1] + '.after-counts.json').read_text())
+for key, value in before.items():
+    if key == 'skills':
+        assert value <= after[key] <= value + 6, (key, value, after[key])
+    else:
+        assert after[key] == value, (key, value, after[key])
+print('Preserved event and document counts:', after)
+PY
+HOST=$(oc get route recruitifi -o jsonpath='{.spec.host}')
+curl --fail "https://$HOST/healthz"
+# Public demo mode; add --user demo to prompt for the existing shared password if protected.
+curl --fail "https://$HOST/api/jobs?industry=it&industry=engineering"
+```
+
+5. Refresh the existing application. Log in as Talent, select IT + Engineering,
+   verify OR filtering and Clear Filters, then refresh to verify saved filters.
+   Check another Talent starts with its own filters/profile/inbox. As Employer 1,
+   switch between jobs 1001 and 1002: on untouched synthetic profiles the leading
+   candidates are 402 and 438 respectively. Existing edited profiles may yield
+   other legitimate ranks. Check the company-1 Interested badge and a legitimate
+   mutual like; job changes must not alter those decisions. Verify Organizer still
+   uses company-level eligibility, and download a pre-existing synthetic document.
+
+There is no job CRUD UI/API in this release. Company-level meeting acceptance and
+human review remain separate from job-fit ranking. Categories for Logistics,
+Restaurant and Cleaning have real domain requirements, but the original candidates
+have no automatic claims for those new skills; low scores are expected. Demo
+accounts remain caller-selected and do not provide secure authorization.
+
+Do not drop tables or delete new skills when rolling back an image. Older versions
+ignore the additive jobs table. Keep the external backup and follow the earlier
+controlled restore procedure only if data recovery is actually needed. The PVC
+alone is not a backup. Actual SCC/CSI/Route admission and interactive behavior in
+the live Rahti deployment remain unverified locally.
