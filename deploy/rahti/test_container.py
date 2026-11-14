@@ -81,6 +81,7 @@ try:
         else:
             raise AssertionError('Unexpected React fallback for ' + path)
     assert json.loads(request(base, '/api/companies')[0]) == [], 'Startup must not seed.'
+    assert json.loads(request(base, '/api/jobs')[0]) == [], 'Startup must not initialize jobs.'
     empty_catalog = json.loads(request(base, '/api/demo/accounts')[0])
     assert len(empty_catalog['accounts']) == 21
     assert not empty_catalog['accounts'][0]['available'], 'Missing profiles must not silently remap or seed.'
@@ -89,6 +90,17 @@ try:
     docker('exec', name, 'python', '-c', 'from backend.database import connect; c=connect(); db=c.__enter__(); assert db.execute("PRAGMA journal_mode=WAL").fetchone()[0]=="wal"; c.__exit__(None,None,None)')
     candidates = json.loads(request(base, '/api/candidates')[0])
     candidate_id = candidates[0]['id']
+    docker('exec', name, 'python', '-m', 'backend.seed_jobs')  # only this new synthetic test volume
+    openings = json.loads(request(base, '/api/jobs')[0])
+    assert len(openings) == 12 and len({job['industry'] for job in openings}) == 7
+    docker('exec', name, 'python', '-c', 'from backend.seed_jobs import initialize_jobs; assert initialize_jobs()==0')
+    software = json.loads(request(base, '/api/jobs/1001/matches', demo_account='employer-001')[0])
+    hardware = json.loads(request(base, '/api/jobs/1002/matches', demo_account='employer-001')[0])
+    assert software[0]['candidate_id'] == 402 and hardware[0]['candidate_id'] == 438
+    filtered = json.loads(request(base, '/api/jobs?industry=it&industry=engineering', demo_account='talent-001')[0])
+    assert all(job['industry'] in ['it', 'engineering'] for job in filtered)
+    assert len(json.loads(request(base, '/api/companies/1/jobs', demo_account='employer-001')[0])) == 3
+    assert len(json.loads(request(base, '/api/candidates/402/job-matches', demo_account='talent-001')[0])) == 12
     catalog = json.loads(request(base, '/api/demo/accounts')[0])
     assert all(account['available'] for account in catalog['accounts'])
     assert (catalog['candidate_count'], catalog['company_count']) == (15, 8)
@@ -121,6 +133,7 @@ try:
     docker('stop', '--time', '40', name)
     assert docker('inspect', '-f', '{{.State.ExitCode}}', name) == '0'
     name, base = start('-second', 1000620001)
+    assert json.loads(request(base, '/api/jobs')[0]) == openings
     restored_inbox = json.loads(request(base, inbox_path)[0])
     assert restored_inbox['entries'][0]['id'] == notification_id and restored_inbox['unread_count'] == 0
     assert json.loads(request(base, '/api/notifications/employer/1')[0])['unread_count'] == 1
@@ -136,7 +149,7 @@ try:
     # Reuse the same synthetic event in hosted mode: authentication must protect
     # frontend, assets, APIs, documentation and persisted document downloads.
     name, base = start('-hosted', 1000620002, hosted=True)
-    for path in ['/', '/talent', '/employer', '/organizer', script, '/api/companies', '/api/candidates', download, inbox_path, '/api/demo/accounts', '/docs', '/openapi.json']:
+    for path in ['/', '/talent', '/employer', '/organizer', script, '/api/companies', '/api/candidates', download, inbox_path, '/api/demo/accounts', '/api/jobs', '/api/jobs/1001/matches', '/docs', '/openapi.json']:
         for header in [None, 'Basic !!!', 'Basic ' + base64.b64encode(('demo:' + secrets.token_urlsafe(24)).encode()).decode(),
                        'Basic ' + base64.b64encode(('other:' + DEMO_PASSWORD).encode()).decode()]:
             try:
@@ -190,7 +203,7 @@ try:
                                  '-e', 'TALENTMATCH_HOSTED_DEMO=1', *env_args, IMAGE],
                                 env={**os.environ, 'TALENTMATCH_DEMO_PASSWORD': secrets.token_urlsafe(24)}, capture_output=True, text=True)
         assert result.returncode != 0 and expected in result.stderr, result.stderr
-    print('PASS: amd64, arbitrary UIDs, read-only rootfs, health, frontend, API, SQLite location, graceful stop, upload persistence, changed-UID writes, root/password guards, hosted startup, demo account mapping/isolation, and frontend/API/download authentication.')
+    print('PASS: amd64, arbitrary UIDs, read-only rootfs, health, frontend, API, SQLite location, graceful stop, upload persistence, changed-UID writes, root/password guards, hosted startup, demo account mapping/isolation, jobs/filtering/ranking persistence, and frontend/API/download authentication.')
     print('NOT VERIFIED: Rahti SCC admission, CSI fsGroup/SELinux, actual PVC and Route. Hosted mode tested locally; no Rahti deployment performed.')
 finally:
     for name in containers:
