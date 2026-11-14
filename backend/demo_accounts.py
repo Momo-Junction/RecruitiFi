@@ -17,6 +17,9 @@ ACCOUNTS = [
     dict(demo_account_id='organizer-001', role='organizer'),
 ]
 BY_ID = {account['demo_account_id']: account for account in ACCOUNTS}
+# Additive AI-only fictional identity; never renumber or repoint seeded accounts.
+AI_DEMO_ACCOUNT = dict(demo_account_id='talent-ai-001', role='talent', candidate_id=900001)
+BY_ID[AI_DEMO_ACCOUNT['demo_account_id']] = AI_DEMO_ACCOUNT
 router = APIRouter(prefix='/api/demo')
 
 
@@ -34,7 +37,10 @@ def account_record(connection, account):
 @router.get('/accounts')
 def list_accounts():
     with connect() as connection:
-        return {'accounts': [account_record(connection, account) for account in ACCOUNTS],
+        accounts = list(ACCOUNTS)
+        if connection.execute('SELECT 1 FROM candidates WHERE id=?', (AI_DEMO_ACCOUNT['candidate_id'],)).fetchone():
+            accounts.append(AI_DEMO_ACCOUNT)
+        return {'accounts': [account_record(connection, account) for account in accounts],
                 'candidate_count': connection.execute('SELECT count(*) FROM candidates').fetchone()[0],
                 'company_count': connection.execute('SELECT count(*) FROM companies').fetchone()[0]}
 
