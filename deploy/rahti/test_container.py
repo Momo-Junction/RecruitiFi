@@ -30,7 +30,7 @@ def request(base, path, body=None, method=None, authorization=None):
         return response.read(), response.headers
 
 
-def start(suffix, uid, hosted=False):
+def start(suffix, uid, hosted=False, public=False):
     name = PREFIX + suffix
     containers.append(name)
     docker('run', '-d', '--name', name, '--platform', 'linux/amd64',
@@ -39,7 +39,8 @@ def start(suffix, uid, hosted=False):
            '--tmpfs', f'/tmp:rw,noexec,nosuid,size=64m,mode=1770,uid={uid},gid=0',
            '--mount', f'type=volume,src={VOLUME},dst=/var/data',
            '-p', '127.0.0.1::8080', '-e', f'TALENTMATCH_HOSTED_DEMO={int(hosted)}',
-           *(['-e', 'TALENTMATCH_DEMO_PASSWORD'] if hosted else []), IMAGE,
+           '-e', f'TALENTMATCH_DEMO_AUTH_ENABLED={str(not public).lower()}',
+           *(['-e', 'TALENTMATCH_DEMO_PASSWORD'] if hosted and not public else []), IMAGE,
            env={**os.environ, 'TALENTMATCH_DEMO_PASSWORD': DEMO_PASSWORD})
     port = docker('port', name, '8080/tcp').rsplit(':', 1)[1]
     base = 'http://127.0.0.1:' + port
@@ -128,6 +129,14 @@ try:
     assert request(base, download, authorization=AUTHORIZATION)[0] == document
     docker('stop', '--time', '40', name)
     assert docker('inspect', '-f', '{{.State.ExitCode}}', name) == '0'
+    name, base = start('-public', 1000620004, hosted=True, public=True)
+    assert b'<div id="root">' in request(base, '/')[0]
+    assert request(base, download)[0] == document
+    assert len(json.loads(request(base, '/api/candidates')[0])) == len(candidates)
+    public_request = urllib.request.Request(base + f'/api/candidates/{candidate_id}/skills', data=b'[]', method='PUT', headers={'Content-Type': 'application/json'})
+    with urllib.request.urlopen(public_request) as response:
+        assert response.status == 200
+    docker('stop', '--time', '40', name)
     for suffix, env_args, expected in [
         ('-no-password', [], 'TALENTMATCH_DEMO_PASSWORD is required'),
         ('-blank-password', ['-e', 'TALENTMATCH_DEMO_PASSWORD=   '], 'TALENTMATCH_DEMO_PASSWORD is required'),
