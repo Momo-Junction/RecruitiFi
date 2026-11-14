@@ -61,3 +61,19 @@ CREATE TABLE IF NOT EXISTS profile_materials (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     CHECK ((url IS NOT NULL AND content IS NULL) OR (url IS NULL AND content IS NOT NULL))
 );
+
+-- Additive migration: existing event records and uploaded BLOBs are untouched.
+CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    candidate_id INTEGER NOT NULL REFERENCES candidates(id),
+    company_id INTEGER NOT NULL REFERENCES companies(id),
+    recipient TEXT NOT NULL CHECK (recipient IN ('talent', 'employer')),
+    kind TEXT NOT NULL CHECK (kind IN ('interest', 'match')),
+    active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    read_at TEXT,
+    UNIQUE (candidate_id, company_id, recipient, kind),
+    CHECK (kind = 'match' OR recipient = 'talent')
+);
+CREATE INDEX IF NOT EXISTS notifications_talent ON notifications(candidate_id, recipient, active);
+CREATE INDEX IF NOT EXISTS notifications_employer ON notifications(company_id, recipient, active);
