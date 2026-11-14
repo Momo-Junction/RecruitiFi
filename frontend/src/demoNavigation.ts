@@ -66,7 +66,17 @@ export function useDemoNavigation() {
     window.addEventListener('popstate', sync)
     return () => window.removeEventListener('popstate', sync)
   }, [navigation])
-  return { account, selectAccount: (next: DemoAccount | null) => setAccount(navigation?.select(next) ?? null) }
+  return { account, selectAccount: (next: DemoAccount | null) => {
+    if (!next && typeof window !== 'undefined') {
+      void fetch('/api/evidence-session', { credentials: 'same-origin', cache: 'no-store' }).then(async response => {
+        if (response.ok) {
+          const data = await response.json()
+          await fetch('/api/evidence-session', { method: 'DELETE', credentials: 'same-origin', headers: { 'X-Recruitifi-CSRF': data.csrf } })
+        }
+      }).catch(() => {})
+    }
+    setAccount(navigation?.select(next) ?? null)
+  } }
 }
 
 export function requireDemoOwner(role: 'talent' | 'employer', identityId: number) {
