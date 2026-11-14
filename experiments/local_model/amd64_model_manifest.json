@@ -1,0 +1,63 @@
+{
+  "repository": "sentence-transformers/all-MiniLM-L6-v2",
+  "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+  "license": "apache-2.0",
+  "target": "x86 AVX2",
+  "files": [
+    {
+      "path": "tokenizer.json",
+      "bytes": 466247,
+      "sha256": "be50c3628f2bf5bb5e3a7f17b1f74611b2561a3a27eeab05e5aa30f411572037"
+    },
+    {
+      "path": "onnx/model_quint8_avx2.onnx",
+      "bytes": 23046789,
+      "sha256": "b941bf19f1f1283680f449fa6a7336bb5600bdcd5f84d10ddc5cd72218a0fd21"
+    }
+  ],
+  "model_bytes": 23046789,
+  "model_and_tokenizer_bytes": 23513036,
+  "quantization": {
+    "source": "Published upstream onnx/model_quint8_avx2.onnx at pinned revision; not locally re-quantized",
+    "method": "Dynamic activation quantization; UINT8 weights; x86 AVX2 artifact",
+    "observed_operators": {
+      "Constant": 218,
+      "Shape": 58,
+      "Gather": 54,
+      "Unsqueeze": 54,
+      "DequantizeLinear": 3,
+      "Add": 88,
+      "Slice": 7,
+      "Concat": 25,
+      "Reshape": 25,
+      "ConstantOfShape": 1,
+      "ReduceMean": 26,
+      "Mul": 134,
+      "Sub": 14,
+      "Equal": 1,
+      "Pow": 13,
+      "Where": 2,
+      "Expand": 1,
+      "Cast": 63,
+      "Sqrt": 31,
+      "Div": 25,
+      "DynamicQuantizeLinear": 48,
+      "MatMulInteger": 48,
+      "Transpose": 24,
+      "Softmax": 6,
+      "Erf": 6
+    },
+    "initializer_types": {
+      "FLOAT": 101,
+      "UINT8": 78
+    },
+    "scale_shapes": {
+      "[]": 3,
+      "[384]": 30,
+      "[1536]": 6
+    },
+    "opset": 14,
+    "inspection_onnx_version": "1.23.2",
+    "limitation": "Original exporter version and calibration/export parameters are not encoded here; mixed per-channel and scalar scales observed."
+  }
+}
