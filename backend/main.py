@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse
 from .demo_accounts import guard_demo_identity, request_account, router as demo_accounts_router
 from .demo_auth import DemoAuthMiddleware, hosted_password
 from .database import SCHEMA_PATH, connect
-from .hiring_tasks import router as hiring_router
+from .hiring_tasks import router as hiring_router, initialize_tasks
 from .matching_engine import LANGUAGE_LEVELS, SCORING_VERSION, calculate_match
 from .models import (
     Candidate,
@@ -49,6 +49,7 @@ async def lifespan(app: FastAPI):
     hosted_password()
     with connect() as connection:
         connection.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        initialize_tasks(connection)
         connection.execute(
             "UPDATE skills SET name = ? WHERE name = ?",
             ("Quantum circuit programming with Qiskit", "Quantum Computing"),
@@ -151,7 +152,7 @@ def save_swipe(swipe: SwipeDecision):
         connection.execute("BEGIN IMMEDIATE")
         if swipe.actor == 'employer' and swipe.decision == 'pass':
             if connection.execute(
-                "SELECT 1 FROM hiring_tasks WHERE candidate_id = ? AND company_id = ? LIMIT 1",
+                "SELECT 1 FROM hiring_task_assignments WHERE candidate_id = ? AND company_id = ? LIMIT 1",
                 (swipe.candidate_id, swipe.company_id),
             ).fetchone():
                 raise HTTPException(409, "This candidate has assigned tasks. Their shortlist decision is locked.")
@@ -373,7 +374,7 @@ def undo_swipe(actor: Literal['talent', 'employer'], candidate_id: PositiveId, c
         connection.execute("BEGIN IMMEDIATE")
         if actor == 'employer':
             if connection.execute(
-                "SELECT 1 FROM hiring_tasks WHERE candidate_id = ? AND company_id = ? LIMIT 1",
+                "SELECT 1 FROM hiring_task_assignments WHERE candidate_id = ? AND company_id = ? LIMIT 1",
                 (candidate_id, company_id),
             ).fetchone():
                 raise HTTPException(409, "This candidate has assigned tasks. Their shortlist decision is locked.")
