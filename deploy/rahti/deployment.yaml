@@ -33,6 +33,8 @@ spec:
               value: /var/data/talentmatch.sqlite3
             - name: TALENTMATCH_HOSTED_DEMO
               value: '1'
+            - name: TALENTMATCH_DEMO_AUTH_ENABLED
+              value: 'false'
             - name: TALENTMATCH_DEMO_PASSWORD
               valueFrom:
                 secretKeyRef:
