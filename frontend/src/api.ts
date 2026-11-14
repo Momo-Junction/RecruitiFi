@@ -238,3 +238,37 @@ export async function markNotificationRead(recipient: DemoNotification['recipien
   if (!response.ok) throw new Error('Could not mark notification as read.')
   return response.json() as Promise<NotificationInbox>
 }
+
+export type IndustryId = 'it' | 'business_services' | 'logistics' | 'health_sector' | 'restaurant' | 'cleaning' | 'engineering'
+export interface IndustryCategory { id: IndustryId; label: string }
+export interface JobOpening extends CompanyRole {
+  id: number
+  company_id: number
+  company_name: string
+  title: string
+  industry: IndustryId
+  industry_label: string
+  description: string
+  active: boolean
+}
+export interface JobMatch extends Match { job_id: number }
+export function loadJobs(signal: AbortSignal, industries: IndustryId[] = []) {
+  const query = new URLSearchParams()
+  industries.forEach((industry) => query.append('industry', industry))
+  return get<JobOpening[]>(`jobs${query.size ? `?${query}` : ''}`, signal)
+}
+export async function loadJobDirectory(signal: AbortSignal) {
+  const [jobs, industries] = await Promise.all([loadJobs(signal), get<IndustryCategory[]>('jobs/industries', signal)])
+  return { jobs, industries }
+}
+export function loadCompanyJobs(companyId: number, signal: AbortSignal) {
+  requireDemoOwner('employer', companyId)
+  return get<JobOpening[]>(`companies/${companyId}/jobs`, signal)
+}
+export function loadJobMatches(jobId: number, signal: AbortSignal) {
+  return get<RankedMatch[]>(`jobs/${jobId}/matches`, signal)
+}
+export async function loadCandidateJobMatches(candidateId: number, signal: AbortSignal) {
+  requireDemoOwner('talent', candidateId)
+  return get<JobMatch[]>(`candidates/${candidateId}/job-matches`, signal)
+}
