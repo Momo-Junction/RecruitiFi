@@ -1,0 +1,200 @@
+{
+  "image": "recruitifi:minilm-service",
+  "image_id": "sha256:20d3f996c8215c7d43c36fc11c5b3b2c6450744819d842ab96eda9cf224304d0",
+  "image_architecture": "amd64",
+  "image_content_bytes": 132407410,
+  "host": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "docker_daemon_architecture": "aarch64",
+  "emulated": true,
+  "commands": [
+    [
+      "docker",
+      "run",
+      "-d",
+      "--pull=never",
+      "--name",
+      "recruitifi-model-service-tests-d11d9dae",
+      "--platform=linux/amd64",
+      "--memory=512m",
+      "--memory-swap=512m",
+      "--cpus=0.5",
+      "--network=none",
+      "--read-only",
+      "--tmpfs",
+      "/tmp:rw,noexec,nosuid,size=64m",
+      "--user=1000620000:0",
+      "--cap-drop=ALL",
+      "--security-opt=no-new-privileges",
+      "--pids-limit=64",
+      "-e",
+      "TALENTMATCH_EMBED_TOKEN",
+      "recruitifi:minilm-service",
+      "python",
+      "-m",
+      "unittest",
+      "service.test_service",
+      "-v"
+    ],
+    [
+      "docker",
+      "run",
+      "-d",
+      "--pull=never",
+      "--name",
+      "recruitifi-model-service-http-d9936e9d",
+      "--platform=linux/amd64",
+      "--memory=512m",
+      "--memory-swap=512m",
+      "--cpus=0.5",
+      "--network=none",
+      "--read-only",
+      "--tmpfs",
+      "/tmp:rw,noexec,nosuid,size=64m",
+      "--user=1000620000:0",
+      "--cap-drop=ALL",
+      "--security-opt=no-new-privileges",
+      "--pids-limit=64",
+      "-e",
+      "TALENTMATCH_EMBED_TOKEN",
+      "recruitifi:minilm-service"
+    ],
+    [
+      "docker",
+      "run",
+      "-d",
+      "--pull=never",
+      "--name",
+      "recruitifi-model-service-missing-2b317476",
+      "--platform=linux/amd64",
+      "--memory=512m",
+      "--memory-swap=512m",
+      "--cpus=0.5",
+      "--network=none",
+      "--read-only",
+      "--tmpfs",
+      "/tmp:rw,noexec,nosuid,size=64m",
+      "--user=1000620000:0",
+      "--cap-drop=ALL",
+      "--security-opt=no-new-privileges",
+      "--pids-limit=64",
+      "-e",
+      "TALENTMATCH_EMBED_TOKEN",
+      "-e",
+      "LOCAL_MODEL_DIR=/tmp/missing-model",
+      "recruitifi:minilm-service"
+    ]
+  ],
+  "unit_state": {
+    "Status": "exited",
+    "Running": false,
+    "Paused": false,
+    "Restarting": false,
+    "OOMKilled": false,
+    "Dead": false,
+    "Pid": 0,
+    "ExitCode": 0,
+    "Error": "",
+    "StartedAt": "2026-11-14T16:54:17.037855958Z",
+    "FinishedAt": "2026-11-14T16:54:46.42547668Z"
+  },
+  "observed_startup_seconds": 19.012395332974847,
+  "limits": {
+    "Memory": 536870912,
+    "MemorySwap": 536870912,
+    "NanoCpus": 500000000,
+    "NetworkMode": "none",
+    "ReadonlyRootfs": true,
+    "PortBindings": {}
+  },
+  "loopback_binding_verified": true,
+  "runtime_uid": "1000620000",
+  "http_smoke_exit_code": 0,
+  "http": {
+    "architecture": "x86_64",
+    "offline_probe_errno": 101,
+    "model": "sentence-transformers/all-MiniLM-L6-v2",
+    "revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+    "measurements": [
+      {
+        "batch_size": 1,
+        "tokens": "short",
+        "samples_ms": [
+          1005.4990839562379,
+          995.9920010296628,
+          1103.9652079925872
+        ],
+        "median_ms": 1005.4990839562379
+      },
+      {
+        "batch_size": 1,
+        "tokens": 256,
+        "samples_ms": [
+          5884.220503037795,
+          5687.696418957785,
+          5691.744545008987
+        ],
+        "median_ms": 5691.744545008987
+      },
+      {
+        "batch_size": 3,
+        "tokens": "short",
+        "samples_ms": [
+          1417.0602920348756,
+          1400.3242500475608,
+          1401.9516659900546
+        ],
+        "median_ms": 1401.9516659900546
+      },
+      {
+        "batch_size": 3,
+        "tokens": 256,
+        "samples_ms": [
+          15388.341715966817,
+          15510.860256967135,
+          15710.453757026698
+        ],
+        "median_ms": 15510.860256967135
+      }
+    ],
+    "server_rss_bytes": 320540672,
+    "server_peak_rss_bytes": 320540672,
+    "container_peak_bytes": 333742080,
+    "memory_events": "low 0\nhigh 0\nmax 0\noom 0\noom_kill 0\noom_group_kill 0\nsock_throttled 0",
+    "cpu_stat": "usage_usec 62470517\nuser_usec 62058766\nsystem_usec 411751\nnice_usec 0\nnr_periods 1254\nnr_throttled 1247\nthrottled_usec 71043213\nnr_bursts 0\nburst_usec 0",
+    "health_during_inference": 200,
+    "waiting_request_status": 429,
+    "waiting_request_ms": 4308.21400199784,
+    "negative_input_checks": "PASS",
+    "normalized_embeddings": "PASS"
+  },
+  "server_state": {
+    "Status": "exited",
+    "Running": false,
+    "Paused": false,
+    "Restarting": false,
+    "OOMKilled": false,
+    "Dead": false,
+    "Pid": 0,
+    "ExitCode": 0,
+    "Error": "",
+    "StartedAt": "2026-11-14T16:54:47.189899833Z",
+    "FinishedAt": "2026-11-14T16:56:53.721856211Z"
+  },
+  "no_sensitive_server_logging": true,
+  "model_startup_count": 1,
+  "image_size_tree": "IMAGE                       ID             DISK USAGE   CONTENT SIZE   EXTRA\nrecruitifi:minilm-service   20d3f996c821        516MB          132MB   U    \n\u2514\u2500 linux/amd64              2aa988d89200        516MB          132MB   U    \n\n",
+  "missing_model_state": {
+    "Status": "exited",
+    "Running": false,
+    "Paused": false,
+    "Restarting": false,
+    "OOMKilled": false,
+    "Dead": false,
+    "Pid": 0,
+    "ExitCode": 3,
+    "Error": "",
+    "StartedAt": "2026-11-14T16:56:53.912411586Z",
+    "FinishedAt": "2026-11-14T16:57:10.226728886Z"
+  },
+  "status": "PASS"
+}
