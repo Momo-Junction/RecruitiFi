@@ -5,6 +5,7 @@ import { TalentWorkspace } from './TalentWorkspace'
 import { EmployerWorkspace } from './EmployerWorkspace'
 import { OrganizerAudit } from './OrganizerAudit'
 import './index.css'
+import { useSwipes } from './useSwipes'
 
 const roles = [
   { id: 'talent', label: 'Talent View' },
@@ -15,6 +16,7 @@ const roles = [
 const card = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6'
 
 function App() {
+  const swipeStore = useSwipes()
   const [role, setRole] = useState<(typeof roles)[number]['id']>('talent')
   const [directory, setDirectory] = useState<Awaited<ReturnType<typeof loadDirectory>>>()
   const [error, setError] = useState('')
@@ -69,11 +71,11 @@ function App() {
         )}
         {role !== 'organizer' && !directory && !error && <p role="status">Loading directory…</p>}
         {directory && (
-          <div hidden={role !== 'talent'}><TalentWorkspace {...directory} /></div>
+          <div hidden={role !== 'talent'}><TalentWorkspace {...directory} swipeStore={swipeStore} /></div>
         )}
         {directory && (
           <div hidden={role !== 'employer'}>
-            <EmployerWorkspace companies={directory.companies} skills={directory.skills} onCompanySaved={(company) => {
+            <EmployerWorkspace swipeStore={swipeStore} companies={directory.companies} skills={directory.skills} onCompanySaved={(company) => {
               setDirectory((current) => current && {
                 ...current,
                 companies: current.companies.map((previous) => previous.id === company.id ? company : previous),
