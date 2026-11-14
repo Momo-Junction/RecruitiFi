@@ -1,3 +1,5 @@
+import { analysisRevision, resourceAnalysisMode, sourceAnalysisNote } from './analysisResources'
+import { useAiMatches, aiLabel, AiExplanation } from './useAiMatches'
 import { filterJobs, IndustryFilters, JobEmptyState, JobRequirements, jobCompanyId, useIndustryFilters } from './Jobs'
 import { NotificationBell } from './NotificationBell'
 import { SwipeDeck, type DiscoveryCard } from './SwipeDeck'
@@ -33,15 +35,8 @@ function MatchBreakdown({ match, busy, onClose }: {
   onClose: () => void
 }) {
   const [requested, setRequested] = useState(false)
-  const eligible = match.dealbreakers_passed && match.meets_threshold
-  const status = eligible
-    ? 'Eligible to Book 1:1'
-    : match.meets_threshold ? 'Requirements unmet' : `Below ${match.min_match_threshold}% Threshold`
-  const bars = [
-    { label: 'Must-have skills', points: match.must_have_points, max: 70, color: 'bg-espoo' },
-    { label: 'Nice-to-have skills', points: match.nice_to_have_points, max: 20, color: 'bg-blue-600' },
-    { label: 'Profile proof', points: match.profile_proof_points, max: 10, color: 'bg-teal-600' },
-  ]
+  const eligible = match.dealbreakers_passed && match.ai?.score != null && match.ai.score >= match.min_match_threshold
+
 
   return (
     <section aria-label="Match Sync Breakdown" className="border-b border-blue-200 bg-mist/60 px-4 py-5 sm:px-6">
@@ -49,27 +44,7 @@ function MatchBreakdown({ match, busy, onClose }: {
         <h3 className="font-bold text-espoo">Match Sync Breakdown</h3>
         <button type="button" onClick={onClose} className="cursor-pointer text-sm font-semibold text-espoo underline">Close</button>
       </div>
-      <p className={`mt-3 inline-block rounded-md px-2.5 py-1 text-sm font-semibold ${eligible ? 'bg-emerald-100 text-emerald-900' : 'bg-amber-100 text-amber-950'}`}>
-        {format.format(match.total_score)}% — {status}
-      </p>
-      <p className="mt-2 text-xs text-slate-600">Minimum score {match.min_match_threshold}%</p>
-      {match.dealbreaker_reasons.length > 0 && (
-        <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
-          {match.dealbreaker_reasons.map((reason) => <li key={reason}>{reason}</li>)}
-        </ul>
-      )}
-      <div className="mt-5 grid gap-4 sm:grid-cols-3">
-        {bars.map(({ label, points, max, color }) => (
-          <div key={label}>
-            <div className="mb-1 flex flex-wrap justify-between gap-x-2 text-xs font-semibold">
-              <span>{label}</span><span className="tabular-nums">{format.format(points)}/{max}</span>
-            </div>
-            <div role="progressbar" aria-label={label} aria-valuenow={points} aria-valuemax={max} className="h-2 overflow-hidden rounded-full bg-blue-100">
-              <div className={`h-full rounded-full transition-[width] motion-reduce:transition-none ${color}`} style={{ width: `${points / max * 100}%` }} />
-            </div>
-          </div>
-        ))}
-      </div>
+      <AiExplanation match={match.ai} />
       <button type="button" disabled={busy || !eligible || requested} onClick={() => setRequested(true)} className={`mt-5 ${primary}`}>
         Request 1:1 Meeting
       </button>
@@ -86,8 +61,18 @@ export function TalentWorkspace({ candidateId, candidates, companies, skills, on
   skills: Skill[]
   onSaved: (candidate: Candidate) => void
 }) {
+  const [analysisMaterials,setAnalysisMaterials]=useState<number[]>([])
+  const [analysisConsent,setAnalysisConsent]=useState(false)
+  const [shareAnalysis,setShareAnalysis]=useState(false)
+  useEffect(() => {setAnalysisMaterials([]);setAnalysisConsent(false);setShareAnalysis(false)},[candidateId])
   const [view, setView] = useState<'swipe' | 'list'>('swipe')
   const [savedProfile, setSavedProfile] = useState<SavedProfile>()
+  const ai = useAiMatches([candidateId], analysisRevision(savedProfile))
+  useEffect(() => {
+    const current = new Set(savedProfile?.materials.map(m => m.id) ?? [])
+    setAnalysisMaterials(ids => ids.filter(id => current.has(id)))
+    setAnalysisConsent(false)
+  },[JSON.stringify(savedProfile?.materials)])
   const [profileError, setProfileError] = useState('')
   const [profileBusy, setProfileBusy] = useState(false)
   const [profileAttempt, setProfileAttempt] = useState(0)
@@ -140,10 +125,10 @@ export function TalentWorkspace({ candidateId, candidates, companies, skills, on
   const availableSkills = skills.filter(({ id }) => !profile.skills.some((skill) => skill.skill_id === id))
   const companyById = new Map(companies.map((company) => [company.id, company]))
   const jobs = jobDirectory?.jobs ?? []
-  const matchByJob = new Map(current?.matches.map((match) => [match.job_id, match]))
+  const matchByJob = new Map(current?.matches.map((match) => [match.job_id, { ...match, ai: ai.match(candidateId, match.job_id) }]))
   const visibleJobs = filterJobs(jobs, filters.selected).sort((a, b) => {
     const x = matchByJob.get(a.id), y = matchByJob.get(b.id)
-    return Number(y?.dealbreakers_passed ?? false) - Number(x?.dealbreakers_passed ?? false) || (y?.total_score ?? 0) - (x?.total_score ?? 0) || a.id - b.id
+    return Number(y?.dealbreakers_passed ?? false) - Number(x?.dealbreakers_passed ?? false) || (y?.ai?.score ?? -1) - (x?.ai?.score ?? -1) || a.id - b.id
   })
   const rows = visibleJobs.map((job) => ({ job, company: companyById.get(job.company_id), match: matchByJob.get(job.id) }))
   function acceptSaved(saved: SavedProfile) {
@@ -166,11 +151,11 @@ export function TalentWorkspace({ candidateId, candidates, companies, skills, on
   const discoveryCards: DiscoveryCard[] = rows.filter(({ job, match }) => match && !own.some((row) => row.company_id === job.company_id)).map(({ job, company, match }) => ({
     id: job.id, name: job.title, subtitle: `${job.company_name} · ${job.industry_label}`,
     monogram: job.company_name.split(' ').slice(0, 2).map((word) => word[0]).join(''),
-    score: match!.total_score, eligible: match!.dealbreakers_passed && match!.meets_threshold,
+    score: match!.ai?.score ?? null, scoreLabel: aiLabel(match!.ai), eligible: match!.dealbreakers_passed && match!.ai?.score != null && match!.ai.score >= job.min_match_threshold,
     likedYou: likedBy.has(job.company_id),
     facts: [`Booth ${company?.booth_number ?? '—'}`, `${job.working_language} B2+`, job.relocation_support ? 'Relocation support' : 'No visa sponsorship'],
-    skills: [...job.must_have_skills.map((skill) => ({ ...skill, priority: 'Required' as const })), ...job.nice_to_have_skills.map((skill) => ({ ...skill, priority: 'Preferred' as const }))].map(({ skill_id, priority }) => ({ name: skillNames.get(skill_id) ?? `Skill #${skill_id}`, matched: profile.skills.some((skill) => skill.skill_id === skill_id), priority })),
-    warnings: [...match!.dealbreaker_reasons, ...(!match!.meets_threshold ? [`Below the ${job.min_match_threshold}% meeting threshold`] : [])],
+    skills: [...job.must_have_skills.map((skill) => ({ ...skill, priority: 'Required' as const })), ...job.nice_to_have_skills.map((skill) => ({ ...skill, priority: 'Preferred' as const }))].map(({ skill_id, priority }) => ({ name: skillNames.get(skill_id) ?? `Skill #${skill_id}`, matched: match!.ai?.requirements.some(r => r.skill_id === skill_id && r.status === 'supported') ?? false, priority })),
+    warnings: match!.dealbreaker_reasons,
   }))
 
   return (
@@ -181,9 +166,16 @@ export function TalentWorkspace({ candidateId, candidates, companies, skills, on
         <p className="mt-5 text-sm font-semibold">{candidate.full_name} · {candidate.anonymous_code}</p>
         <p className="mt-3 text-sm text-slate-600">{Object.entries(profile.languages).map(([name, level]) => `${name} ${level}`).join(' · ')}</p>
         {profile.needs_visa_sponsorship && <p className="mt-1 text-sm text-slate-600">Needs visa sponsorship</p>}
-        <ProfileMaterials key={candidate.id} profile={savedProfile} skills={skills} onSaved={acceptSaved} />
+        <fieldset className="my-4 rounded-xl border border-slate-200 p-3 text-sm"><legend className="font-semibold">AI profile analysis</legend>
+          <p>Select up to three saved resources from any section. PDFs provide text; other links and images use saved descriptions. Public profiles are retrieved when available; site restrictions are reported without inventing content.</p>
+          {savedProfile.materials.map(m => <label key={m.id} className="mt-2 flex gap-2"><input type="checkbox" checked={analysisMaterials.includes(m.id)} onChange={e => setAnalysisMaterials(ids => e.target.checked ? [...ids,m.id].slice(0,3) : ids.filter(id => id!==m.id))} /><span>{m.title} · {m.category}<small className="block text-slate-600">{resourceAnalysisMode(m,ai.publicProfilesEnabled)}</small></span></label>)}
+          {!savedProfile.materials.length && <p className="mt-2">Add a resource and description below before analyzing.</p>}
+          <label className="mt-3 flex gap-2"><input type="checkbox" checked={analysisConsent} onChange={e => setAnalysisConsent(e.target.checked)} />I own or have permission to analyze the selected evidence with the private model.</label>
+          <label className="mt-2 flex gap-2"><input type="checkbox" checked={shareAnalysis} onChange={e => setShareAnalysis(e.target.checked)} />Share resulting job scores and short evidence excerpts with Employer 001.</label>
+          <button type="button" className={primary} disabled={ai.busy || (candidateId!==900001 && (!analysisConsent || analysisMaterials.length===0))} onClick={() => void ai.analyze(candidateId,analysisMaterials.length && analysisConsent ? analysisMaterials : undefined,shareAnalysis)}>{ai.busy ? 'Analyzing…' : 'Analyze My Profile'}</button>
+        </fieldset>{ai.message && <p role="status" className="mt-2 text-sm">{ai.message}</p>}{ai.sources.map(source => <p key={source.material_id} className="mt-1 text-xs text-slate-600">Source #{source.material_id} · {source.category}: {sourceAnalysisNote(source)}</p>)}<ProfileMaterials key={candidate.id} profile={savedProfile} skills={skills} onSaved={acceptSaved} />
         {profileError && <p role="alert" className="mt-3 text-sm text-red-800">{profileError}</p>}
-        <h3 className="mt-6 text-sm font-bold">Your skills</h3>
+        <h3 className="mt-6 text-sm font-bold">Your skills</h3><p className="mt-1 text-xs text-slate-600">Added skills are self-declared. Adding or removing a skill refreshes AI status; analyze your selected evidence again to update its supporting associations. Selecting a skill alone does not verify proficiency or increase AI evidence scores.</p>
         <form className="mt-2 flex gap-2" onSubmit={(event) => {
           event.preventDefault()
           const skillId = Number(skillToAdd)
@@ -247,7 +239,7 @@ export function TalentWorkspace({ candidateId, candidates, companies, skills, on
                 <span className="block font-semibold">{job.title}</span>
                 <span className="block text-xs leading-relaxed text-slate-600">{job.company_name} · {job.industry_label}</span>
               </span>
-              <span className={`shrink-0 text-lg font-bold tabular-nums text-espoo ${busy ? 'opacity-50' : ''}`}>{match ? `${format.format(match.total_score)}%` : '—'}</span>
+              <span className={`shrink-0 text-lg font-bold tabular-nums text-espoo ${busy ? 'opacity-50' : ''}`}>{aiLabel(match?.ai)}</span>
               <span aria-hidden="true" className="text-espoo">{openJob === job.id ? '−' : '+'}</span>
             </button>
             {openJob === job.id && match && (
