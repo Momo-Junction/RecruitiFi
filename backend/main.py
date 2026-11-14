@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Literal
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
@@ -18,6 +19,7 @@ from .models import (
     PositiveId,
     RankedMatch,
     Skill,
+    SwipeDecision,
 )
 
 COMPANY_JSON_FIELDS = ("must_have_skills", "nice_to_have_skills")
@@ -41,7 +43,7 @@ app.add_middleware(
         ).split(",")
         if origin.strip()
     ],
-    allow_methods=["GET", "POST", "PUT"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type"],
 )
 
@@ -74,6 +76,26 @@ def list_companies():
 @app.get("/api/candidates", response_model=list[Candidate])
 def list_candidates():
     return read_rows("SELECT * FROM candidates ORDER BY id", *CANDIDATE_JSON_FIELDS)
+
+
+@app.get('/api/swipes', response_model=list[SwipeDecision])
+def list_swipes():
+    return read_rows('SELECT * FROM swipe_decisions ORDER BY candidate_id, company_id, actor')
+
+
+@app.put('/api/swipes', response_model=SwipeDecision)
+def save_swipe(swipe: SwipeDecision):
+    with connect() as connection:
+        if not connection.execute('SELECT 1 FROM candidates WHERE id = ?', (swipe.candidate_id,)).fetchone():
+            raise HTTPException(status_code=404, detail='Candidate not found.')
+        if not connection.execute('SELECT 1 FROM companies WHERE id = ?', (swipe.company_id,)).fetchone():
+            raise HTTPException(status_code=404, detail='Company not found.')
+        connection.execute(
+            'INSERT INTO swipe_decisions (candidate_id, company_id, actor, decision) VALUES (?, ?, ?, ?) '
+            'ON CONFLICT(candidate_id, company_id, actor) DO UPDATE SET decision = excluded.decision',
+            (swipe.candidate_id, swipe.company_id, swipe.actor, swipe.decision),
+        )
+    return swipe
 
 
 def get_company(company_id: int) -> Company:
@@ -274,3 +296,13 @@ def list_audit_calculations(
         "inputs", "result", params=(before_id, before_id, limit + 1),
     )
     return {"entries": rows[:limit], "next_before_id": rows[limit - 1]["id"] if len(rows) > limit else None}
+
+
+@app.delete('/api/swipes/{actor}/{candidate_id}/{company_id}')
+def undo_swipe(actor: Literal['talent', 'employer'], candidate_id: PositiveId, company_id: PositiveId):
+    with connect() as connection:
+        connection.execute(
+            'DELETE FROM swipe_decisions WHERE actor = ? AND candidate_id = ? AND company_id = ?',
+            (actor, candidate_id, company_id),
+        )
+    return {'deleted': True}
