@@ -77,3 +77,17 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 CREATE INDEX IF NOT EXISTS notifications_talent ON notifications(candidate_id, recipient, active);
 CREATE INDEX IF NOT EXISTS notifications_employer ON notifications(company_id, recipient, active);
+
+-- Additive job requirements; company-level swipes/notifications retain their keys.
+CREATE TABLE IF NOT EXISTS job_openings (
+    id INTEGER PRIMARY KEY,
+    company_id INTEGER NOT NULL REFERENCES companies(id),
+    title TEXT NOT NULL CHECK (length(trim(title)) > 0),
+    industry TEXT NOT NULL CHECK (industry IN ('it', 'business_services', 'logistics', 'health_sector', 'restaurant', 'cleaning', 'engineering')),
+    description TEXT NOT NULL,
+    must_have_skills TEXT NOT NULL CHECK (json_type(must_have_skills) = 'array'),
+    nice_to_have_skills TEXT NOT NULL CHECK (json_type(nice_to_have_skills) = 'array'),
+    active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1))
+);
+CREATE INDEX IF NOT EXISTS jobs_company ON job_openings(company_id, active);
+CREATE INDEX IF NOT EXISTS jobs_industry ON job_openings(industry, active);
