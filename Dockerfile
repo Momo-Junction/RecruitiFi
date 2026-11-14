@@ -18,6 +18,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     HOME=/tmp \
     TMPDIR=/tmp \
+    TALENTMATCH_SERVE_FRONTEND=1 \
     TALENTMATCH_DB=/var/data/talentmatch.sqlite3 \
     PORT=8080
 WORKDIR /app
