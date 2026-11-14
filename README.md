@@ -63,3 +63,17 @@ The seed script creates `backend/talentmatch.sqlite3`. Rerunning it updates the 
 The `esco_uri` values are local identifiers for the demo. Candidate emails use `example.com`. The UI displays candidate codes while the demo API returns the full synthetic records.
 
 Set `TALENTMATCH_DB` to use a different database file. The default CORS origins are `http://localhost:5173` and `http://127.0.0.1:5173`. Set `TALENTMATCH_CORS_ORIGINS` to a comma-separated list for other origins. Set `VITE_API_URL` in `frontend/.env` to point the frontend to a different API base URL.
+
+## Swipe discovery
+
+Talent and Employer views open with a swipe deck ranked by the existing matching engine (dealbreakers first, then score). Drag a card right to like or left to pass, use the action buttons, or focus a card and press the arrow keys. Shared skills are highlighted; missing skills and meeting blockers stay visible. Profile edits recalculate Talent recommendations. On mobile, discovery appears before the profile editor.
+
+Likes and passes persist in SQLite per demo candidate, company, and side. The Likes tab distinguishes pending interest from mutual likes. Undo restores the last swiped card. A mutual like records interest; meeting acceptance still follows the existing eligibility checks. Employer cards keep candidate identities anonymous.
+
+- `GET /api/swipes` reads saved demo decisions.
+- `PUT /api/swipes` upserts `{candidate_id, company_id, actor, decision}` (`actor`: `talent` or `employer`; `decision`: `like` or `pass`).
+- `DELETE /api/swipes/{actor}/{candidate_id}/{company_id}` undoes one side's decision.
+
+Restart the backend after upgrading; startup creates the swipe table without reseeding. Like the rest of this demo, these endpoints use shared personas without authentication. Talent profile edits remain temporary simulations; employer scores use saved seed profiles. Production use needs authenticated identity and access control. Decisions update across both views in the current page; reload to fetch changes from another browser.
+
+Run the isolated swipe API checks with `backend/.venv/bin/python -m unittest backend.test_swipes`.
