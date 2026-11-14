@@ -1,4 +1,5 @@
 """Local-only Docker smoke/persistence test. No CSC access; uses a disposable volume."""
+import base64
 import json
 import os
 import secrets
@@ -14,19 +15,22 @@ IMAGE = sys.argv[1] if len(sys.argv) > 1 else 'recruitifi:rahti-local'
 PREFIX = 'recruitifi-check-' + uuid.uuid4().hex[:10]
 VOLUME = PREFIX + '-data'
 containers = []
+DEMO_PASSWORD = secrets.token_urlsafe(32)
+AUTHORIZATION = "Basic " + base64.b64encode(("demo:" + DEMO_PASSWORD).encode()).decode()
 
 
 def docker(*args, **kwargs):
     return subprocess.check_output(['docker', *args], text=True, stderr=subprocess.STDOUT, **kwargs).strip()
 
 
-def request(base, path, body=None, method=None):
-    req = urllib.request.Request(base + path, data=body, method=method)
+def request(base, path, body=None, method=None, authorization=None):
+    headers = {'Authorization': authorization} if authorization else {}
+    req = urllib.request.Request(base + path, data=body, method=method, headers=headers)
     with urllib.request.urlopen(req, timeout=10) as response:
         return response.read(), response.headers
 
 
-def start(suffix, uid):
+def start(suffix, uid, hosted=False):
     name = PREFIX + suffix
     containers.append(name)
     docker('run', '-d', '--name', name, '--platform', 'linux/amd64',
@@ -34,7 +38,9 @@ def start(suffix, uid):
            '--security-opt=no-new-privileges',
            '--tmpfs', f'/tmp:rw,noexec,nosuid,size=64m,mode=1770,uid={uid},gid=0',
            '--mount', f'type=volume,src={VOLUME},dst=/var/data',
-           '-p', '127.0.0.1::8080', '-e', 'TALENTMATCH_HOSTED_DEMO=0', IMAGE)
+           '-p', '127.0.0.1::8080', '-e', f'TALENTMATCH_HOSTED_DEMO={int(hosted)}',
+           *(['-e', 'TALENTMATCH_DEMO_PASSWORD'] if hosted else []), IMAGE,
+           env={**os.environ, 'TALENTMATCH_DEMO_PASSWORD': DEMO_PASSWORD})
     port = docker('port', name, '8080/tcp').rsplit(':', 1)[1]
     base = 'http://127.0.0.1:' + port
     for _ in range(90):
@@ -86,9 +92,45 @@ try:
         assert response.status == 200
     docker('exec', name, 'python', '-c', 'import os,sqlite3,tempfile; src=sqlite3.connect("file:"+os.environ["TALENTMATCH_DB"]+"?mode=ro",uri=True); f=tempfile.NamedTemporaryFile(); dst=sqlite3.connect(f.name); src.backup(dst); assert dst.execute("PRAGMA integrity_check").fetchone()[0]=="ok"; assert dst.execute("SELECT content FROM profile_materials WHERE content IS NOT NULL").fetchone()[0].startswith(b"%PDF-"); restored=sqlite3.connect(":memory:"); dst.backup(restored); assert restored.execute("SELECT count(*) FROM profile_materials").fetchone()[0]>0; restored.close(); dst.close(); src.close(); f.close()')
     docker('stop', '--time', '40', name)
+    # Reuse the same synthetic event in hosted mode: authentication must protect
+    # frontend, assets, APIs, documentation and persisted document downloads.
+    name, base = start('-hosted', 1000620002, hosted=True)
+    for path in ['/', script, '/api/companies', '/api/candidates', download, '/docs', '/openapi.json']:
+        for header in [None, 'Basic !!!', 'Basic ' + base64.b64encode(('demo:' + secrets.token_urlsafe(24)).encode()).decode(),
+                       'Basic ' + base64.b64encode(('other:' + DEMO_PASSWORD).encode()).decode()]:
+            try:
+                request(base, path, authorization=header)
+            except urllib.error.HTTPError as error:
+                assert error.code == 401
+                assert error.headers['WWW-Authenticate'].startswith('Basic ')
+            else:
+                raise AssertionError('Hosted resource accepted missing/invalid credentials: ' + path)
+        _, headers = request(base, path, authorization=AUTHORIZATION)
+        assert headers['Cache-Control'] == 'no-store'
+    assert request(base, download, authorization=AUTHORIZATION)[0] == document
+    assert b'<div id="root">' in request(base, '/', authorization=AUTHORIZATION)[0]
+    assert len(json.loads(request(base, '/api/candidates', authorization=AUTHORIZATION)[0])) == len(candidates)
+    assert json.loads(request(base, '/healthz')[0]) == {'status': 'ok'}
+    # Actual hosted upload: unauthorized body must not reach document storage.
+    upload = f'/api/candidates/{candidate_id}/documents?{query}'
+    try:
+        request(base, upload, document, 'POST')
+    except urllib.error.HTTPError as error:
+        assert error.code == 401
+    else:
+        raise AssertionError('Unauthenticated hosted upload was accepted')
+    hosted_saved = json.loads(request(base, upload, document, 'POST', AUTHORIZATION)[0])
+    hosted_document_id = hosted_saved['materials'][0]['id']
+    docker('stop', '--time', '40', name)
+    assert docker('inspect', '-f', '{{.State.ExitCode}}', name) == '0'
+    name, base = start('-hosted-recreated', 1000620003, hosted=True)
+    assert request(base, f'/api/candidates/{candidate_id}/documents/{hosted_document_id}', authorization=AUTHORIZATION)[0] == document
+    assert request(base, download, authorization=AUTHORIZATION)[0] == document
+    docker('stop', '--time', '40', name)
+    assert docker('inspect', '-f', '{{.State.ExitCode}}', name) == '0'
     for suffix, env_args, expected in [
         ('-no-password', [], 'TALENTMATCH_DEMO_PASSWORD is required'),
-        ('-auth-blocked', ['-e', 'TALENTMATCH_DEMO_PASSWORD'], 'authentication is not implemented'),
+        ('-blank-password', ['-e', 'TALENTMATCH_DEMO_PASSWORD=   '], 'TALENTMATCH_DEMO_PASSWORD is required'),
         ('-root', [], 'non-root UID'),
     ]:
         test_name = PREFIX + suffix
@@ -98,8 +140,8 @@ try:
                                  '-e', 'TALENTMATCH_HOSTED_DEMO=1', *env_args, IMAGE],
                                 env={**os.environ, 'TALENTMATCH_DEMO_PASSWORD': secrets.token_urlsafe(24)}, capture_output=True, text=True)
         assert result.returncode != 0 and expected in result.stderr, result.stderr
-    print('PASS: amd64, arbitrary UIDs, read-only rootfs, health, frontend, API, SQLite location, graceful stop, upload persistence, changed-UID writes, root/password/auth guards.')
-    print('NOT VERIFIED: Rahti SCC admission, CSI fsGroup/SELinux, actual PVC and Route. Hosted mode intentionally blocked.')
+    print('PASS: amd64, arbitrary UIDs, read-only rootfs, health, frontend, API, SQLite location, graceful stop, upload persistence, changed-UID writes, root/password guards, hosted startup, and frontend/API/download authentication.')
+    print('NOT VERIFIED: Rahti SCC admission, CSI fsGroup/SELinux, actual PVC and Route. Hosted mode tested locally; no Rahti deployment performed.')
 finally:
     for name in containers:
         subprocess.run(['docker', 'rm', '-f', name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
