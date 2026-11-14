@@ -77,7 +77,7 @@ test('oversized responses and another Talent session are rejected before analysi
 test('all saved resource categories describe the actual analysis capability',async()=>{
  const {resourceAnalysisMode,analysisRevision}=await server.ssrLoadModule('/src/analysisResources.ts')
  for(const category of ['cv','project','certificate','research'])assert.match(resourceAnalysisMode({category,content_type:'application/pdf'}),/PDF text/)
- for(const category of ['linkedin','website','certificate','research','project'])assert.match(resourceAnalysisMode({category,url:'https://example.invalid',description:'Synthetic description'}),/external page is not fetched/)
+ for(const category of ['website','certificate','research','project'])assert.match(resourceAnalysisMode({category,url:'https://example.invalid',description:'Synthetic description'}),/external page is not fetched/)
  assert.match(resourceAnalysisMode({category:'certificate',content_type:'image/png'}),/no OCR/)
  assert.match(resourceAnalysisMode({category:'github'}),/owner\/repository/)
  const profile={candidate:{skills:[]},materials:[{id:1,description:'Synthetic Python API'}]}
@@ -90,7 +90,7 @@ test('all saved resource categories describe the actual analysis capability',asy
 
 test('bare profiles are labelled as skipped rather than repository retrieval',async()=>{
  const {resourceAnalysisMode}=await server.ssrLoadModule('/src/analysisResources.ts')
- assert.match(resourceAnalysisMode({category:'linkedin',url:'https://www.linkedin.com/in/synthetic',description:''}),/Not analyzed.*does not block/)
+ assert.match(resourceAnalysisMode({category:'linkedin',url:'https://www.linkedin.com/in/synthetic',description:''}),/profile-completion points/)
  assert.match(resourceAnalysisMode({category:'github',url:'https://github.com/SyntheticOwner',description:''}),/Not analyzed/)
  assert.match(resourceAnalysisMode({category:'github',url:'https://github.com/SyntheticOwner',description:'Synthetic Python project'}),/Saved description only/)
  assert.match(resourceAnalysisMode({category:'github',url:'https://github.com/SyntheticOwner/Repository',description:''}),/Public repository files/)
@@ -112,8 +112,22 @@ test('description editor uses the existing verified session and CSRF',async()=>{
 test('automatic profile retrieval is labelled separately from saved descriptions',async()=>{
  const {resourceAnalysisMode,sourceAnalysisNote}=await server.ssrLoadModule('/src/analysisResources.ts')
  assert.match(resourceAnalysisMode({category:'github',url:'https://github.com/SyntheticOwner',description:''},true),/Automatically retrieves public bio/)
- assert.match(resourceAnalysisMode({category:'linkedin',url:'https://www.linkedin.com/in/synthetic',description:''},true),/publicly accessible professional profile text/)
+ assert.match(resourceAnalysisMode({category:'linkedin',url:'https://www.linkedin.com/in/synthetic',description:''},true),/no page fetching or AI verification/)
  assert.match(sourceAnalysisNote({content_status:'public_github_metadata'}),/Retrieved public GitHub/)
  assert.match(sourceAnalysisNote({content_status:'public_profile_text'}),/Retrieved publicly accessible/)
  assert.match(sourceAnalysisNote({content_status:'not_analyzed',detail:'LinkedIn blocked access'}),/blocked access/)
+})
+
+
+test('LinkedIn bonus is capped and labelled separately from model evidence',async()=>{
+ const {displayAiScore}=await server.ssrLoadModule('/src/useAiMatches.tsx')
+ const match={status:'completed',score:74.5,display_score:76.5,profile_bonus:2,requirements:[]}
+ assert.equal(displayAiScore(match),76.5)
+ assert.equal(aiLabel(match),'76.5% combined fit')
+ const html=renderToString(React.createElement(AiExplanation,{match})).replaceAll('<!-- -->','')
+ assert.match(html,/MiniLM evidence score: 74.5%/);assert.match(html,/profile-completion bonus: \+2/);assert.match(html,/not fetched or verified/)
+ assert.equal(aiLabel({...match,score:99.5,display_score:100}),'100.0% combined fit')
+})
+test('invalid completed scores do not crash rendering or display a percentage',()=>{
+ for(const score of [NaN,Infinity,-1,101,null])assert.equal(aiLabel({status:'completed',score,requirements:[]}), 'Not analyzed')
 })
