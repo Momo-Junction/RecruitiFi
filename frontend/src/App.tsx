@@ -5,6 +5,7 @@ import { EmployerWorkspace } from './EmployerWorkspace'
 import { OrganizerWorkspace } from './OrganizerWorkspace'
 import { useSwipes } from './useSwipes'
 import { useDemoNavigation, type DemoAccount, type DemoRole } from './demoNavigation'
+import { loginAccount } from './accountSession'
 
 const roles = [
   { id: 'talent', label: 'Talent View' },
@@ -107,6 +108,31 @@ export function App() {
   const [attempt, setAttempt] = useState(0)
   const [role, setRole] = useState<DemoRole | null>(null)
   const [choice, setChoice] = useState('')
+  const [privateLogin, setPrivateLogin] = useState<boolean>()
+  const [verified, setVerified] = useState('')
+  const [password, setPassword] = useState('')
+  const [signingIn, setSigningIn] = useState(false)
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch('/api/evidence-session/config', { credentials: 'same-origin', cache: 'no-store', signal: controller.signal }).then(async response => {
+      if (!response.ok) throw new Error('Account verification configuration is unavailable.')
+      const data = await response.json()
+      if (typeof data.verified_login_required !== 'boolean') throw new Error('Invalid account verification configuration.')
+      if (!controller.signal.aborted) setPrivateLogin(data.verified_login_required)
+    }).catch(cause => { if (!controller.signal.aborted) setError(cause.message) })
+    return () => controller.abort()
+  }, [attempt])
+  useEffect(() => {
+    if (!privateLogin || !account || account.role === 'organizer') return
+    const controller = new AbortController()
+    fetch('/api/evidence-session', { credentials: 'same-origin', cache: 'no-store', signal: controller.signal }).then(async response => {
+      const identity = response.ok ? await response.json() : null
+      if (controller.signal.aborted) return
+      if (identity?.account_id === account.demo_account_id) setVerified(identity.account_id)
+      else { selectAccount(null); setError('Sign in to verify your selected account.') }
+    }).catch(() => { if (!controller.signal.aborted) { selectAccount(null); setError('Account verification failed.') } })
+    return () => controller.abort()
+  }, [privateLogin, account?.demo_account_id])
   useEffect(() => {
     const controller = new AbortController()
     setError('')
@@ -119,10 +145,10 @@ export function App() {
   const valid = selected?.available && selected.role === account?.role
     && (selected.role !== 'talent' || (account?.role === 'talent' && selected.candidate_id === account.candidate_id))
     && (selected.role !== 'employer' || (account?.role === 'employer' && selected.company_id === account.company_id))
-  function logout() { selectAccount(null); setRole(null); setChoice('') }
+  function logout() { selectAccount(null); setRole(null); setChoice(''); setPassword(''); setVerified('') }
   // Key the whole dashboard, including directory, pending profiles and swipe state.
   // No personal requests are made until the stored identity matches the server catalog.
-  if (account && valid && selected && catalog) return <DemoDashboard key={selected.demo_account_id} account={selected} catalog={catalog} logout={logout} />
+  if (privateLogin !== undefined && account && valid && selected && catalog && (!privateLogin || selected.role === 'organizer' || verified === selected.demo_account_id)) return <DemoDashboard key={selected.demo_account_id} account={selected} catalog={catalog} logout={logout} />
   const choices = catalog?.accounts.filter((item) => item.role === role) ?? []
   const chosen = choices.find((item) => item.demo_account_id === choice)
   return <div className="min-h-screen bg-[#f6f8fc] text-ink">
@@ -141,7 +167,16 @@ export function App() {
             <p className="mt-3 text-sm leading-relaxed text-slate-600">{id === 'talent' ? 'Build your profile and discover employers that fit your skills.' : id === 'employer' ? 'Explore candidate skills and find people for your team.' : 'Plan introductions and support employers across the event.'}</p>
             <button type="button" aria-pressed={role === id} onClick={() => { setRole(id); setChoice('') }} className="mt-6 w-full cursor-pointer rounded-lg bg-espoo px-4 py-3 text-sm font-semibold text-white hover:bg-blue-900">Continue as {id === 'talent' ? 'Talent' : id === 'employer' ? 'Employer' : 'Espoo Organizer'}</button>
           </article>)}</div>
-          {role && catalog && <form className={`mt-6 ${card}`} onSubmit={(event) => { event.preventDefault(); if (chosen?.available) selectAccount(chosen) }}>
+          {role && catalog && <form className={`mt-6 ${card}`} onSubmit={async (event) => {
+            event.preventDefault()
+            if (!chosen?.available || privateLogin === undefined || signingIn) return
+            setSigningIn(true); setError('')
+            try {
+              if (privateLogin && chosen.role !== 'organizer') { await loginAccount(chosen.demo_account_id, password); setVerified(chosen.demo_account_id) }
+              selectAccount(chosen)
+            } catch (cause) { setError((cause as Error).message) }
+            finally { setPassword(''); setSigningIn(false) }
+          }}>
             <label className="grid gap-2 text-sm font-semibold">Demo account
               <select required value={choice} onChange={(event) => setChoice(event.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2">
                 <option value="">Select your demo account</option>
@@ -149,12 +184,13 @@ export function App() {
               </select>
             </label>
             {choices.filter((item) => !item.available).map((item) => <p key={item.demo_account_id} role="alert" className="mt-2 text-sm text-red-800">{item.error}</p>)}
-            <button type="submit" disabled={!chosen?.available} className="mt-4 rounded-lg bg-espoo px-4 py-3 font-semibold text-white enabled:cursor-pointer disabled:opacity-50">Enter Dashboard</button>
+            {privateLogin && role !== 'organizer' && <label className="mt-3 grid gap-2 text-sm font-semibold">Account password<input required type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2" /></label>}
+            <button type="submit" disabled={!chosen?.available || privateLogin === undefined || signingIn} className="mt-4 rounded-lg bg-espoo px-4 py-3 font-semibold text-white enabled:cursor-pointer disabled:opacity-50">{signingIn ? 'Signing in…' : 'Enter Dashboard'}</button>
           </form>}
         </>}
         {!catalog && !error && !account && <p role="status" className="mt-4">Loading demo accounts…</p>}
         {error && <p role="alert" className="mt-4">{error} <button type="button" className="underline" onClick={() => setAttempt((value) => value + 1)}>Retry</button></p>}
-        <p className="mt-6 text-xs text-slate-500">Password-free demo accounts only — no secure account authorization. Use synthetic information only.</p>
+        <p className="mt-6 text-xs text-slate-500">{privateLogin ? 'Server-verified synthetic demo accounts. AI access reuses this sign-in.' : 'Password-free demo navigation only — no secure account authorization.'} Use synthetic information only.</p>
       </section>
     </main>
   </div>
