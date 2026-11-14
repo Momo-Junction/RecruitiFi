@@ -8,6 +8,7 @@ export interface DiscoveryCard {
   score: number
   eligible: boolean
   likedYou: boolean
+  interestLabel?: string
   facts: string[]
   skills: { name: string; matched: boolean }[]
   warnings: string[]
@@ -21,8 +22,8 @@ function Icon({ kind }: { kind: 'heart' | 'close' | 'undo' }) {
 
 export function SwipeDeck({ cards, loading, error, onRetry, onDecide, saved, onReview, onUndo }: {
   cards: DiscoveryCard[]; loading: boolean; error?: string; onRetry: () => void
-  onDecide: (id: number, decision: 'like' | 'pass') => Promise<void>
-  saved: { id: number; name: string; mutual: boolean }[]
+  onDecide: (id: number, decision: 'like' | 'pass') => Promise<boolean>
+  saved: { id: number; name: string; mutual: boolean; interested?: boolean }[]
   onUndo: (id: number) => Promise<void>
   onReview?: (id: number) => void
 }) {
@@ -37,6 +38,11 @@ export function SwipeDeck({ cards, loading, error, onRetry, onDecide, saved, onR
   const locked = useRef(false)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const card = cards[0]
+  useEffect(() => {
+    if (!notice) return
+    const timeout = setTimeout(() => setNotice(''), 5000)
+    return () => clearTimeout(timeout)
+  }, [notice])
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
   async function choose(decision: 'like' | 'pass') {
     if (!card || loading || locked.current) return
@@ -45,9 +51,9 @@ export function SwipeDeck({ cards, loading, error, onRetry, onDecide, saved, onR
     // Animate first, then commit. A failed save keeps the same card available.
     await new Promise<void>((resolve) => { timer.current = setTimeout(resolve, 240) })
     try {
-      await onDecide(card.id, decision)
+      const mutual = await onDecide(card.id, decision)
       setLast(card.id)
-      setNotice(decision === 'like' ? card.likedYou ? `It's a match! You and ${card.name} liked each other.` : `You liked ${card.name}. Waiting for a like back.` : `Passed on ${card.name}.`)
+      setNotice(decision === 'like' ? mutual ? `It's a Match! You and ${card.name} liked each other.` : `You liked ${card.name}. Waiting for a like back.` : `Passed on ${card.name}.`)
     } catch (cause) { setFailure((cause as Error).message) }
     finally { setLeaving(null); setDrag(0); setSaving(false); locked.current = false }
   }
@@ -61,7 +67,7 @@ export function SwipeDeck({ cards, loading, error, onRetry, onDecide, saved, onR
     {error ? <div className="discovery-empty" role="alert"><p>{error}</p><button onClick={onRetry}>Try again</button></div> : loading ? <div className="discovery-empty" role="status"><span className="discovery-loader" /><h3>Finding your people…</h3><p>Comparing skills, evidence and role requirements.</p></div> : tab === 'likes' ? <div className="discovery-saved">
       <h3>Your next conversations</h3><p>A match happens when you both swipe right.</p>
       {!saved.length && <div className="discovery-empty"><h3>Make the first move.</h3><p>Your liked profiles will appear here.</p><button onClick={() => setTab('discover')}>Explore profiles</button></div>}
-      {saved.map((item) => <div className="discovery-saved-row" key={item.id}><span className="saved-heart">♥</span><div><strong>{item.name}</strong><small>{item.mutual ? '♥ Mutual match · say hello at the booth' : 'Liked · waiting for a like back'}</small></div>{onReview && <button onClick={() => onReview(item.id)}>View fit ↗</button>}</div>)}
+      {saved.map((item) => <div className="discovery-saved-row" key={item.id}><span className="saved-heart">♥</span><div><strong>{item.name} {item.interested && <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-900">Interested</span>}</strong><small>{item.mutual ? '♥ Mutual match · say hello at the booth' : 'Liked · waiting for a like back'}</small></div>{onReview && <button onClick={() => onReview(item.id)}>View fit ↗</button>}</div>)}
     </div> : <>
       <div className="swipe-stage">
         {card ? <>
@@ -78,7 +84,7 @@ export function SwipeDeck({ cards, loading, error, onRetry, onDecide, saved, onR
             <div className="swipe-art"><div className="swipe-orbit orbit-one" /><div className="swipe-orbit orbit-two" /><span className="swipe-brand">TALENT / CONNECTIONS</span><span className="swipe-fit"><i />{Number(card.score.toFixed(1))}% fit</span><div className="swipe-monogram">{card.monogram}<span>✦</span></div><div className="swipe-art-caption">GREAT WORK STARTS<br />WITH A CONNECTION.</div>
               {(Math.abs(drag) > 35 || leaving) && <span className={`swipe-stamp ${leaving === 'like' || (!leaving && drag > 0) ? 'stamp-like' : 'stamp-pass'}`}>{leaving === 'like' || (!leaving && drag > 0) ? 'LIKE' : 'PASS'}</span>}
             </div>
-            <div className="swipe-body"><div className="swipe-kicker">{card.likedYou ? '♥ Already likes you' : card.eligible ? '✓ Meets the role requirements' : 'Explore your potential'}</div><h3>{card.name}</h3><p className="swipe-subtitle">{card.subtitle}</p><div className="swipe-facts">{card.facts.map((fact) => <span key={fact}>{fact}</span>)}</div>
+            <div className="swipe-body"><div className="swipe-kicker">{card.likedYou ? <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-900">{card.interestLabel ?? '♥ Already likes you'}</span> : card.eligible ? '✓ Meets the role requirements' : 'Explore your potential'}</div><h3>{card.name}</h3><p className="swipe-subtitle">{card.subtitle}</p><div className="swipe-facts">{card.facts.map((fact) => <span key={fact}>{fact}</span>)}</div>
               <div className="swipe-skills-title">THE SKILL CONNECTION <span>✓ in common</span></div><div className="swipe-skills">{card.skills.map((skill) => <span key={skill.name} className={skill.matched ? 'skill-common' : ''}>{skill.matched && '✓ '}{skill.name}</span>)}</div>
               {card.warnings.length > 0 && <p className="swipe-warning">{card.warnings.join(' · ')}</p>}
               {onReview && <button className="swipe-detail" onClick={() => onReview(card.id)}>Why this match? <span>↗</span></button>}
@@ -96,7 +102,7 @@ export function SwipeDeck({ cards, loading, error, onRetry, onDecide, saved, onR
       <p className="swipe-hint">← Swipe to pass <span>•</span> Swipe to connect →</p>
     </>}
     {failure && <p role="alert" className="swipe-error">{failure}</p>}
-    <p className={`swipe-notice ${notice.startsWith("It's a match") ? 'is-match' : ''}`} role="status">{saving ? 'Saving your choice…' : notice}</p>
+    <p className={`swipe-notice ${notice.startsWith("It's a Match!") ? 'is-match' : ''}`} role="status">{saving ? 'Saving your choice…' : notice}</p>
     <p className="discovery-footnote">Demo personas share this event's likes. A like is interest, not a meeting booking.</p>
   </section>
 }
