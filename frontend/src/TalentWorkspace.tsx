@@ -1,5 +1,5 @@
 import { analysisRevision, resourceAnalysisMode, sourceAnalysisNote } from './analysisResources'
-import { useAiMatches, aiLabel, AiExplanation } from './useAiMatches'
+import { useAiMatches, aiLabel, AiExplanation, displayAiScore } from './useAiMatches'
 import { filterJobs, IndustryFilters, JobEmptyState, JobRequirements, jobCompanyId, useIndustryFilters } from './Jobs'
 import { NotificationBell } from './NotificationBell'
 import { SwipeDeck, type DiscoveryCard } from './SwipeDeck'
@@ -152,7 +152,7 @@ export function TalentWorkspace({ candidateId, candidates, companies, skills, on
   const discoveryCards: DiscoveryCard[] = rows.filter(({ job, match }) => match && !own.some((row) => row.company_id === job.company_id)).map(({ job, company, match }) => ({
     id: job.id, name: job.title, subtitle: `${job.company_name} · ${job.industry_label}`,
     monogram: job.company_name.split(' ').slice(0, 2).map((word) => word[0]).join(''),
-    score: match!.ai?.score ?? null, scoreLabel: aiLabel(match!.ai), eligible: match!.dealbreakers_passed && match!.ai?.score != null && match!.ai.score >= job.min_match_threshold,
+    score: displayAiScore(match!.ai), scoreLabel: aiLabel(match!.ai), eligible: match!.dealbreakers_passed && match!.ai?.score != null && match!.ai.score >= job.min_match_threshold,
     likedYou: likedBy.has(job.company_id),
     facts: [`Booth ${company?.booth_number ?? '—'}`, `${job.working_language} B2+`, job.relocation_support ? 'Relocation support' : 'No visa sponsorship'],
     skills: [...job.must_have_skills.map((skill) => ({ ...skill, priority: 'Required' as const })), ...job.nice_to_have_skills.map((skill) => ({ ...skill, priority: 'Preferred' as const }))].map(({ skill_id, priority }) => ({ name: skillNames.get(skill_id) ?? `Skill #${skill_id}`, matched: match!.ai?.requirements.some(r => r.skill_id === skill_id && r.status === 'supported') ?? false, priority })),
@@ -168,7 +168,7 @@ export function TalentWorkspace({ candidateId, candidates, companies, skills, on
         <p className="mt-3 text-sm text-slate-600">{Object.entries(profile.languages).map(([name, level]) => `${name} ${level}`).join(' · ')}</p>
         {profile.needs_visa_sponsorship && <p className="mt-1 text-sm text-slate-600">Needs visa sponsorship</p>}
         <fieldset className="my-4 rounded-xl border border-slate-200 p-3 text-sm"><legend className="font-semibold">AI profile analysis</legend>
-          <p>Select up to three saved resources from any section. PDFs provide text; other links and images use saved descriptions. Public profiles are retrieved when available; site restrictions are reported without inventing content.</p>
+          <p>Select up to three saved resources from any section. PDFs provide text; other links and images use saved descriptions. GitHub links use public retrieval by default. A LinkedIn link adds a labelled +2 profile-completion bonus; its page is not fetched.</p>
           {savedProfile.materials.map(m => <label key={m.id} className="mt-2 flex gap-2"><input type="checkbox" checked={analysisMaterials.includes(m.id)} onChange={e => setAnalysisMaterials(ids => e.target.checked ? [...ids,m.id].slice(0,3) : ids.filter(id => id!==m.id))} /><span>{m.title} · {m.category}<small className="block text-slate-600">{resourceAnalysisMode(m,ai.publicProfilesEnabled)}</small></span></label>)}
           {!savedProfile.materials.length && <p className="mt-2">Add a resource and description below before analyzing.</p>}
           <label className="mt-3 flex gap-2"><input type="checkbox" checked={analysisConsent} onChange={e => setAnalysisConsent(e.target.checked)} />I own or have permission to analyze the selected evidence with the private model.</label>
