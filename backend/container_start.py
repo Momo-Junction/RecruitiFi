@@ -2,17 +2,13 @@
 import os
 from pathlib import Path
 
+from .demo_auth import hosted_password
+
 
 def validate_runtime():
     if os.geteuid() == 0:
         raise RuntimeError("Run with a platform-assigned non-root UID; root runtime is not supported.")
-    if os.environ.get("TALENTMATCH_HOSTED_DEMO") == "1":
-        if not os.environ.get("TALENTMATCH_DEMO_PASSWORD", "").strip():
-            raise RuntimeError("TALENTMATCH_DEMO_PASSWORD is required for hosted demo mode.")
-        raise RuntimeError(
-            "Hosted demo authentication is not implemented in this checkout. "
-            "Deployment is blocked; do not expose this unauthenticated application."
-        )
+    hosted_password()  # Fail closed before any data writes if hosted config is invalid.
     database = Path(os.environ.get("TALENTMATCH_DB", ""))
     if not database.is_absolute() or database.parent != Path("/var/data"):
         raise RuntimeError("Container TALENTMATCH_DB must be an absolute file path directly in /var/data.")
