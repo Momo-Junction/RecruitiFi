@@ -13,6 +13,7 @@ export function useSwipes(active = true) {
   const [tasks, setTasks] = useState<HiringTask[]>([])
   const [ready, setReady] = useState(false)
   const [error, setError] = useState('')
+  const [taskError,setTaskError]=useState('')
   const [attempt, setAttempt] = useState(0)
   const revision = useRef(0)
 
@@ -25,10 +26,12 @@ export function useSwipes(active = true) {
       controller?.abort()
       const request = new AbortController()
       controller = request
-      Promise.all([loadSwipes(request.signal), loadHiringTasks(request.signal)]).then(([values, assignments]) => {
-        if (!request.signal.aborted && version === revision.current) { setTasks(assignments); setSwipes(values); setReady(true); setError('') }
-      }).catch(() => {
-        if (!request.signal.aborted) setError('Could not load saved likes. Retry to start discovering.')
+      Promise.allSettled([loadSwipes(request.signal), loadHiringTasks(request.signal)]).then(([likes, assignments]) => {
+        if(request.signal.aborted || version!==revision.current)return
+        if(likes.status==='fulfilled'){setSwipes(likes.value);setReady(true);setError('')}
+        else setError('Could not load saved likes. Retry to start discovering.')
+        if(assignments.status==='fulfilled'){setTasks(assignments.value);setTaskError('')}
+        else {setTasks([]);setTaskError('Hiring tasks are unavailable. Verify your account sign-in and retry.')}
       })
     }
     refresh()
@@ -59,7 +62,7 @@ export function useSwipes(active = true) {
       : [saved, ...previous])
   }
 
-  return { undo, swipes, tasks, saveTask, ready, error, retry: () => setAttempt((value) => value + 1), decide }
+  return { undo, swipes, tasks, taskError, saveTask, ready, error, retry: () => setAttempt((value) => value + 1), decide }
 }
 
 export type SwipeStore = ReturnType<typeof useSwipes>
