@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import { EvidenceAnalysis, type EvidenceAnalysisView } from './EvidenceAnalysis'
+import { saveResourceDescription } from './useAiMatches'
+import { BrowserEvidence } from './BrowserEvidence'
 import { documentUrl, profileRequest, type MaterialCategory, type SavedProfile, type Skill } from './api'
 
 const sections: { category: MaterialCategory; label: string; help: string; upload: boolean }[] = [
@@ -13,8 +16,9 @@ const sections: { category: MaterialCategory; label: string; help: string; uploa
 const field = 'w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm'
 const button = 'rounded-lg bg-espoo px-3 py-2 text-sm font-semibold text-white enabled:cursor-pointer disabled:opacity-50'
 
-export function ProfileMaterials({ profile, skills, onSaved }: {
+export function ProfileMaterials({ profile, skills, onSaved, analysisViews = [] }: {
   profile: SavedProfile; skills: Skill[]; onSaved: (profile: SavedProfile) => void
+  analysisViews?: EvidenceAnalysisView[]
 }) {
   const [category, setCategory] = useState<MaterialCategory | null>(null)
   const [mode, setMode] = useState<'upload' | 'link'>('upload')
@@ -45,7 +49,29 @@ export function ProfileMaterials({ profile, skills, onSaved }: {
                   <li key={item.id} className="rounded-lg bg-mist p-2 text-sm">
                     <a href={item.url ?? documentUrl(candidateId, item.id)} target="_blank" rel="noopener noreferrer" className="break-words font-semibold text-espoo underline">{item.title}</a>
                     {item.description && <p className="mt-1 whitespace-pre-wrap break-words text-xs text-slate-600">{item.description}</p>}
+                    {item.url && <details className="mt-2 text-xs"><summary className="cursor-pointer text-espoo underline">Add / edit analysis description</summary>
+                      <form className="mt-2 space-y-2" onSubmit={async event => {
+                        event.preventDefault()
+                        const description=String(new FormData(event.currentTarget).get('description') ?? '')
+                        setBusy(true);setError('')
+                        try {
+                          const saved=await saveResourceDescription(candidateId,item.id,description)
+                          onSaved({...profile,materials:profile.materials.map(m=>m.id===item.id?{...m,description:saved}:m)})
+                          setNotice('Description saved. Select this resource and confirm consent to analyze again.')
+                        } catch(cause){setError((cause as Error).message)}
+                        finally{setBusy(false)}
+                      }}>
+                        <p>Optional: add your own experience or project summary. Public-profile retrieval may be blocked by the source website.</p>
+                        <textarea aria-label={`Analysis description for ${item.title}`} name="description" defaultValue={item.description} maxLength={1500} className={field} />
+                        <button type="submit" disabled={busy} className={button}>Save description</button>
+                      </form>
+                    </details>}
+
                     {item.skill_id && <p className="mt-1 text-xs text-slate-600">{skills.find(({ id }) => id === item.skill_id)?.name}</p>}
+                    {(item.category === 'project' || item.category === 'github') && <BrowserEvidence key={`${candidateId}-${item.id}`} candidateId={candidateId} materialId={item.id} />}
+                    {(item.category === 'project' || item.category === 'github') && analysisViews
+                      .filter(view => view.candidateId === candidateId && view.materialId === item.id)
+                      .map(view => <EvidenceAnalysis key={`${view.candidateId}-${view.materialId}`} view={view} />)}
                     <button type="button" disabled={busy} className="mt-1 text-xs text-espoo underline enabled:cursor-pointer" aria-label={`Remove ${item.title}`} onClick={async () => {
                       setBusy(true); setError('')
                       try {
