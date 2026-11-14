@@ -83,3 +83,17 @@ Likes and passes persist in SQLite per demo candidate, company, and side. The Li
 Restart the backend after upgrading; startup creates the swipe table without reseeding. Like the rest of this demo, these endpoints use shared personas without authentication. Talent profile edits remain temporary simulations; employer scores use saved seed profiles. Production use needs authenticated identity and access control. Decisions update across both views in the current page; reload to fetch changes from another browser.
 
 Run the isolated swipe API checks with `backend/.venv/bin/python -m unittest backend.test_swipes`.
+
+## Container and Rahti infrastructure
+
+See [the Rahti deployment runbook](deploy/rahti/README.md) for local container
+checks, persistence, manifests and backup/restore commands. The container serves
+the built frontend and API on port 8080, with SQLite at `/var/data/talentmatch.sqlite3`.
+Production frontend builds use same-origin `/api` requests; Vite development keeps
+the localhost API default. `/healthz` reports process health after startup.
+
+**Hosted deployment is blocked:** this checkout has no shared-demo authentication.
+Per the deployment scope, authentication was not added. The container refuses
+`TALENTMATCH_HOSTED_DEMO=1` even if a password is provided; do not expose the
+unauthenticated app publicly or disable this guard on Rahti. No Render config
+was present to modify. Existing local development behavior is preserved.
