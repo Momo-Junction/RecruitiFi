@@ -1,4 +1,5 @@
 import json
+import asyncio
 import os
 from pathlib import Path
 from typing import Literal
@@ -31,6 +32,12 @@ from .profile_materials import candidate_profile, router as profile_router
 from .hosting import initialize_demo
 from .jobs import router as jobs_router
 from .notifications import initialize_notifications, reconcile_pair, router as notifications_router
+from .evidence.api import router as evidence_router
+from .evidence.jobs import AnalysisManager
+from .evidence.sessions import router as evidence_sessions_router
+from .evidence.employer_api import router as employer_evidence_router
+from .evidence.public_demo_api import router as public_evidence_router
+from .evidence.profile_matching import router as profile_matching_router
 
 COMPANY_JSON_FIELDS = ("must_have_skills", "nice_to_have_skills")
 CANDIDATE_JSON_FIELDS = ("languages", "skills")
@@ -50,7 +57,11 @@ async def lifespan(app: FastAPI):
         initialize_demo()
     with connect() as connection:
         initialize_notifications(connection)
-    yield
+    app.state.evidence_jobs = AnalysisManager()
+    try:
+        yield
+    finally:
+        await asyncio.to_thread(app.state.evidence_jobs.close)
 
 
 # Validate hosted configuration before Uvicorn can accept requests, including direct launches.
@@ -60,6 +71,11 @@ app.include_router(jobs_router)
 app.include_router(demo_accounts_router)
 app.include_router(profile_router)
 app.include_router(notifications_router)
+app.include_router(evidence_router)
+app.include_router(evidence_sessions_router)
+app.include_router(employer_evidence_router)
+app.include_router(public_evidence_router)
+app.include_router(profile_matching_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
