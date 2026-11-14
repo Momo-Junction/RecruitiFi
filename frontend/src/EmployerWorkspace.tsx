@@ -1,11 +1,12 @@
+import { JobRequirements } from './Jobs'
 import { interestedCandidates } from './useSwipes'
 import { NotificationBell } from './NotificationBell'
 import { SwipeDeck, type DiscoveryCard } from './SwipeDeck'
 import type { SwipeStore } from './useSwipes'
 import { useEffect, useState } from 'react'
 import {
-  acceptCompanyMeeting, loadCompanyMatches, saveCompanyRole,
-  type Candidate, type Company, type CompanyRole, type MeetingContact, type RankedMatch, type Skill, type WeightedSkill,
+  acceptCompanyMeeting, loadCompanyMatches, loadCompanyJobs, loadJobMatches, saveCompanyRole,
+  type JobOpening, type Candidate, type Company, type CompanyRole, type MeetingContact, type RankedMatch, type Skill, type WeightedSkill,
 } from './api'
 
 const panel = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6'
@@ -129,11 +130,12 @@ function QuickRoleBuilder({ company, skills, onSave, onClose }: {
   )
 }
 
-export function CandidateSignal({ match, companyId, interested = false }: { match: RankedMatch; companyId: number; interested?: boolean }) {
+export function CandidateSignal({ match, companyId, interested = false, jobContext = false }: { match: RankedMatch; companyId: number; interested?: boolean; jobContext?: boolean }) {
   const [contact, setContact] = useState<MeetingContact>()
   const [accepting, setAccepting] = useState(false)
   const [reviewed, setReviewed] = useState(false)
   const [error, setError] = useState('')
+  const needsReview = jobContext || !match.dealbreakers_passed || !match.meets_threshold
   const signals = [...match.must_have_skills, ...match.nice_to_have_skills].filter(({ evidence_tier }) => evidence_tier !== 'missing')
   return (
     <li className="rounded-xl border border-slate-200 p-4">
@@ -151,8 +153,9 @@ export function CandidateSignal({ match, companyId, interested = false }: { matc
           </li>
         ))}
       </ul>
-      {(!match.dealbreakers_passed || !match.meets_threshold) && (
+      {needsReview && (
         <div className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
+          {jobContext && <p>Job fit is shown. Meetings remain subject to the company’s existing human review.</p>}
           {match.dealbreaker_reasons.map((reason) => <p key={reason}>{reason}</p>)}
           {!match.meets_threshold && <p>Below the role’s suggested match level.</p>}
           <label className="mt-2 flex items-start gap-2"><input type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)} />I have reviewed this profile and would like a conversation.</label>
@@ -165,7 +168,7 @@ export function CandidateSignal({ match, companyId, interested = false }: { matc
           <p className="mt-2 font-semibold text-espoo">{contact.conversation_starter}</p>
         </div>
       ) : (
-        <button type="button" disabled={accepting || ((!match.dealbreakers_passed || !match.meets_threshold) && !reviewed)} className={`mt-4 ${button}`} onClick={async () => {
+        <button type="button" disabled={accepting || (needsReview && !reviewed)} className={`mt-4 ${button}`} onClick={async () => {
           setAccepting(true)
           setError('')
           try { setContact(await acceptCompanyMeeting(companyId, match.anonymous_code, reviewed)) }
@@ -187,22 +190,36 @@ export function EmployerWorkspace({ companyId, companies, skills, candidates, on
   const [showAll, setShowAll] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [notice, setNotice] = useState('')
-  const [result, setResult] = useState<{ company: Company; attempt: number; matches: RankedMatch[]; failed: boolean }>()
+  const [jobs, setJobs] = useState<JobOpening[]>()
+  const [jobsError, setJobsError] = useState('')
+  const [selectedJob, setSelectedJob] = useState<number>()
+  const job = jobs?.find((item) => item.id === selectedJob) ?? jobs?.[0]
+  const [result, setResult] = useState<{ company: Company; jobId?: number; attempt: number; matches: RankedMatch[]; failed: boolean }>()
   const company = companies.find(({ id }) => id === companyId)
-  const current = result?.company === company && result?.attempt === attempt ? result : undefined
+  const current = result?.company === company && result?.attempt === attempt && result.jobId === job?.id ? result : undefined
 
   useEffect(() => {
-    if (!company) return
     const controller = new AbortController()
-    loadCompanyMatches(company.id, controller.signal).then((matches) => {
+    setJobsError('')
+    loadCompanyJobs(companyId, controller.signal).then((values) => {
+      if (!controller.signal.aborted) setJobs(values)
+    }).catch(() => { if (!controller.signal.aborted) setJobsError('Could not load your job openings.') })
+    return () => controller.abort()
+  }, [companyId, attempt])
+
+  useEffect(() => {
+    if (!company || !jobs) return
+    const controller = new AbortController()
+    const pending = job ? loadJobMatches(job.id, controller.signal) : loadCompanyMatches(company.id, controller.signal)
+    pending.then((matches) => {
       if (!controller.signal.aborted) setResult({
-        company, attempt, matches, failed: false,
+        company, jobId: job?.id, attempt, matches, failed: false,
       })
     }).catch(() => {
-      if (!controller.signal.aborted) setResult({ company, attempt, matches: [], failed: true })
+      if (!controller.signal.aborted) setResult({ company, jobId: job?.id, attempt, matches: [], failed: true })
     })
     return () => controller.abort()
-  }, [company, attempt, candidates])
+  }, [company, job, jobs, attempt, candidates])
 
   if (!company) return <p>Your demo company profile is unavailable. Log out and contact the demo operator.</p>
   const visibleMatches = current?.matches.filter((match) => showAll || (match.dealbreakers_passed && match.meets_threshold)) ?? []
@@ -210,10 +227,10 @@ export function EmployerWorkspace({ companyId, companies, skills, candidates, on
   const own = decisions.filter((row) => row.actor === 'employer')
   const likedBy = interestedCandidates(swipeStore.swipes, company.id)
   const cards: DiscoveryCard[] = (current?.matches ?? []).filter((match) => !own.some((row) => row.candidate_id === match.candidate_id)).map((match) => ({
-    id: match.candidate_id, name: match.anonymous_code, subtitle: 'Talent in Espoo · identity stays private',
+    id: match.candidate_id, name: match.anonymous_code, subtitle: job ? `${job.title} · ${company.name}` : 'Talent in Espoo · identity stays private',
     monogram: match.anonymous_code.slice(-2), score: match.total_score,
     eligible: match.dealbreakers_passed && match.meets_threshold, likedYou: likedBy.has(match.candidate_id), interestLabel: 'Interested',
-    facts: [match.dealbreakers_passed ? 'Language & visa compatible' : 'Check role requirements', `${company.min_match_threshold}% meeting threshold`],
+    facts: [match.dealbreakers_passed ? 'Language & visa compatible' : 'Check role requirements', `${job?.min_match_threshold ?? company.min_match_threshold}% meeting threshold`],
     skills: [...match.must_have_skills, ...match.nice_to_have_skills].map((skill) => ({ name: skill.skill_name, matched: skill.evidence_tier !== 'missing' })),
     warnings: [...match.dealbreaker_reasons, ...(!match.meets_threshold ? ['Below your meeting threshold'] : [])],
   }))
@@ -228,10 +245,22 @@ export function EmployerWorkspace({ companyId, companies, skills, candidates, on
           {!editing && <button type="button" className={`mt-4 ${button}`} onClick={() => { setNotice(''); setEditing(true) }}>Quick Role Builder</button>}
           {notice && <p role="status" className="mt-3 text-sm font-semibold text-emerald-800">{notice}</p>}
         </section>
+        <section className={`${panel} mt-5`} aria-label="My Job Openings">
+          <h2 className="text-lg font-bold">My Job Openings</h2>
+          {jobsError ? <p role="alert" className="mt-3 text-sm text-red-800">{jobsError} <button onClick={() => setAttempt((value) => value + 1)} className="underline">Retry</button></p> : !jobs ? <p role="status">Loading job openings…</p> : jobs.length ? <>
+            <label className="mt-3 grid gap-2 text-sm font-semibold">Selected job
+              <select className={input} value={job?.id ?? ''} onChange={(event) => setSelectedJob(Number(event.target.value))}>
+                {jobs.map((opening) => <option key={opening.id} value={opening.id}>{opening.title}{opening.active ? '' : ' · Inactive'}</option>)}
+              </select>
+            </label>
+            {job && <JobRequirements job={job} skills={skills} />}
+          </> : <p className="mt-3 text-sm text-slate-600">No job openings yet. Ask the demo operator to initialize jobs. Company-level rankings are shown.</p>}
+        </section>
         {editing && <QuickRoleBuilder key={company.id} company={company} skills={skills} onClose={() => setEditing(false)} onSave={(saved) => {
           onCompanySaved(saved)
           setEditing(false)
-          setNotice('Role saved.')
+          setNotice('Role saved. Job-specific skill requirements remain unchanged.')
+          setAttempt((value) => value + 1)
         }} />}
       </div>
       <div className="order-first min-w-0 lg:order-none">
@@ -239,7 +268,7 @@ export function EmployerWorkspace({ companyId, companies, skills, candidates, on
           <button type="button" aria-pressed={view === 'swipe'} onClick={() => setView('swipe')}>✦ Discover talent</button>
           <button type="button" aria-pressed={view === 'queue'} onClick={() => { setView('queue') }}>Eligible queue</button>
         </div>
-        {view === 'swipe' && <SwipeDeck key={company.id} cards={cards} loading={!current || !swipeStore.ready} error={swipeStore.error || (current?.failed ? 'Could not load candidate scores.' : '')}
+        {view === 'swipe' && <SwipeDeck key={`${company.id}:${job?.id ?? 'company'}`} cards={cards} loading={!current || !swipeStore.ready} error={jobsError || swipeStore.error || (current?.failed ? 'Could not load candidate scores.' : '')}
           onRetry={() => { swipeStore.retry(); setAttempt((value) => value + 1) }}
           onUndo={(candidate_id) => swipeStore.undo({ candidate_id, company_id: company.id, actor: 'employer' })}
           onDecide={(candidate_id, decision) => swipeStore.decide({ candidate_id, company_id: company.id, actor: 'employer', decision })}
@@ -259,7 +288,7 @@ export function EmployerWorkspace({ companyId, companies, skills, candidates, on
             <p role="status" className="text-sm font-semibold text-espoo">{visibleMatches.length} {showAll ? 'profiles to explore' : 'suggested conversations'}</p>
             {visibleMatches.length === 0 && <p className="mt-3 rounded-lg bg-mist p-4 text-sm">No suggestions yet. Explore all talent to find potential beyond the role requirements.</p>}
             <ul className="mt-3 space-y-3">
-              {visibleMatches.map((match) => <CandidateSignal key={match.anonymous_code} match={match} companyId={company.id} interested={likedBy.has(match.candidate_id)} />)}
+              {visibleMatches.map((match) => <CandidateSignal key={`${job?.id ?? 'company'}:${match.anonymous_code}`} match={match} companyId={company.id} jobContext={!!job} interested={likedBy.has(match.candidate_id)} />)}
             </ul>
           </div>
         )}
