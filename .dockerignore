@@ -6,6 +6,8 @@
 !backend/*.py
 !backend/schema.sql
 !backend/requirements.txt
+!backend/evidence/
+!backend/evidence/*.py
 backend/test_*.py
 !frontend/
 !frontend/package.json
