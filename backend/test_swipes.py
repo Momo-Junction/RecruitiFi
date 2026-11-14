@@ -43,8 +43,8 @@ class SwipeApiTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_likes_persist_and_both_sides_are_independent(self):
         self.assertEqual(await self.request('GET'), (200, []))
-        self.assertEqual(await self.request('PUT', value=self.vote), (200, self.vote))
-        self.assertEqual(await self.request('PUT', value=self.vote), (200, self.vote))
+        self.assertEqual(await self.request('PUT', value=self.vote), (200, {**self.vote, 'mutual_match': False}))
+        self.assertEqual(await self.request('PUT', value=self.vote), (200, {**self.vote, 'mutual_match': False}))
         employer = {**self.vote, 'actor': 'employer'}
         await self.request('PUT', value=employer)
         status, rows = await self.request('GET')
