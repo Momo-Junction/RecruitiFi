@@ -41,9 +41,11 @@ port 8000 and the private model to loopback port 8081.
 
 The command prints the path to a private `account-passwords.txt` file outside
 Git. It configures distinct local passwords for `talent-001` through
-`talent-015`, `talent-ai-001`, and `employer-001`. These passwords are local only;
-existing Rahti credentials are unchanged. The other Employer aliases are not
-configured by this local launcher. Organizer remains a preview.
+`talent-015`, `talent-ai-001`, `employer-001` through `employer-005`, and
+`organizer-001`: all 22 selectable accounts. Existing local passwords are retained;
+new accounts get distinct random passwords. These passwords are local only;
+existing Rahti credentials are unchanged. Verified-login mode requires a password
+for every role, including Organizer. Employer login alone grants no private AI sharing.
 
 Refresh http://localhost:5173/ and sign in through the main account screen.
 Previously selected accounts must sign in again. Select your own supported
@@ -59,9 +61,10 @@ Skills remain self-declared: edits invalidate cached AI results and the dashboar
 refreshes their status; re-run analysis to update evidence associations. Adding
 a skill without supporting evidence does not increase AI coverage scores.
 
-The local AI launcher enables `TALENTMATCH_AI_FETCH_PUBLIC_PROFILES=1`.
-This opt-in server setting enables public-profile retrieval after the existing
-owner consent; it does not change authentication or Employer sharing.
+Public GitHub retrieval is enabled by default after existing owner consent.
+`TALENTMATCH_AI_FETCH_PUBLIC_PROFILES=0` explicitly disables profile retrieval;
+`1` enables it. This does not make private repositories public, change
+authentication, or grant Employer sharing.
 
 GitHub profile URLs retrieve the public bio and a bounded sample of up to three
 recent non-fork repository descriptions/languages using only `api.github.com`.
@@ -71,23 +74,30 @@ used. Profile and repository retrieval share the existing 30-second, 26-request,
 2 MB response and 100 KB decoded-text budget, with at most three sampled
 repositories total. No returned URLs or redirects are followed.
 
-LinkedIn /in/profile URLs attempt one HTTPS request to `www.linkedin.com`, with
-public DNS/address pinning, certificate verification, a 10-second limit and
-256 KiB HTML ceiling. Only publicly returned professional text is extracted;
-no JavaScript, cookies, login, CAPTCHA solving or auth-wall bypass is used.
-A public browser profile may still block server requests. Rate limits, login
-walls, redirects and unreadable pages are reported explicitly. Blocked content
-is never embedded, and other readable evidence can still complete analysis.
-LinkedIn's official Profile API requires approved access; this app does not
-pretend that public visibility grants that API authorization.
+A valid selected HTTPS LinkedIn /in/profile link adds a **+2-point profile-completion
+bonus** to completed job scores, capped at 100. LinkedIn pages are never fetched
+by profile analysis. No description is required for this bonus; it is not verified
+AI evidence. The raw MiniLM score stays unchanged. Cards show “combined fit” and
+explanations separate the evidence score from the bonus. Duplicate LinkedIn
+links do not stack. A LinkedIn-only selection cannot produce an AI analysis;
+include readable PDF/project/GitHub evidence. Failed inference yields no bonus score.
 
 Other websites remain metadata-only. Saved descriptions are an optional
-fallback, and can be updated with **Add / edit analysis description**. If only
-blocked/empty links are selected, analysis fails with the retrieval reason,
-without fabricated results. Retrieved profiles are held in memory only; stored
-results contain short attributed excerpts, not full pages. Public-profile
-retrieval is disabled by default outside the local launcher; enabling it in a
-hosted environment also requires permitted HTTPS egress to these fixed hosts.
+fallback and can be updated with **Add / edit analysis description**. Unreadable
+sources receive explicit notes. Retrieved GitHub text is held in memory only;
+stored results contain short attributed excerpts. Hosted GitHub retrieval requires
+permitted HTTPS egress to api.github.com. Up to 128 active jobs share a bounded
+six-fragment evidence sample and cached requirement embeddings.
+
+API requests default to relative /api paths in development and production. Vite
+proxies development requests to loopback port 8000, preserving the signed session
+cookie. Use VITE_API_URL only with an explicitly configured compatible origin.
+
+The pulled hiring-task endpoints now require the signed account session, enforce
+owner scope, and require CSRF on writes; a selector header alone cannot access
+private submissions. Task loading failures do not prevent swipe cards from loading.
+The additive hiring_task_assignments table imports compatible historical hiring_tasks
+rows idempotently and preserves incompatible legacy task tables without deleting data.
 
 PDF evidence must contain readable text, be unencrypted,
 and contain at most ten pages. Images/scanned PDFs have no OCR support. Validation,
@@ -116,7 +126,7 @@ Talent profiles have dedicated sections for CVs, projects, certificates, researc
 
 CV and portfolio availability are derived from saved materials. Skills linked to projects, research or submitted certificates receive the corresponding scoring tier. A submitted certificate has a reviewable attachment or URL, and its authenticity requires human review. Legacy seeded skill claims are treated as listed skills until supporting material is attached.
 
-This hackathon demo uses individual password-free demo accounts with shared API access (see below). Real deployment requires authenticated candidate ownership and authorized document access before handling real personal documents.
+The AI-enabled demo uses distinct password-verified accounts at the main account screen. Legacy password-free preview and shared API routes remain described below; they are not production authentication. Do not use real personal documents with the shared hackathon deployment.
 
 | Endpoint | Returns |
 | --- | --- |
@@ -263,7 +273,10 @@ swipe listing returns only the selected profile's pairs. Anonymous matching
 responses do not contain documents, email or full names. Matching calculations,
 thresholds, Organizer eligibility, and notification rules are unchanged.
 
-**These accounts are not secure authentication.** The account ID is caller-selected
+**The legacy account selector alone is not secure authentication.** With
+`TALENTMATCH_VERIFIED_DEMO_LOGIN=1`, all selectable roles must also sign in to the
+server-verified session; AI and hiring-task routes enforce that session. The
+legacy selector header remains caller-selected
 and can be changed. Existing shared API calls without the header remain supported,
 and direct document links do not carry it. Anyone with demo access can choose any
 account or use shared API routes, including writes and document downloads. These
