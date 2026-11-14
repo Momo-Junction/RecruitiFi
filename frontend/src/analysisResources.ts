@@ -12,7 +12,7 @@ export function resourceAnalysisMode(material: SavedProfile['materials'][number]
     } catch { /* Server validates URLs before any retrieval. */ }
     return 'Public repository files; use an owner/repository URL'
   }
-  if (material.category==='linkedin' && publicProfiles) return 'Attempts publicly accessible professional profile text; LinkedIn may block automated access'
+  if (material.category==='linkedin') return '+2 profile-completion points for a valid LinkedIn profile URL; no page fetching or AI verification'
   if (['linkedin','website'].includes(material.category) && !material.description?.trim()) return 'Not analyzed without a description; does not block other evidence'
   if (material.content_type === 'application/pdf') return 'PDF text; maximum 10 pages'
   if (material.content_type === 'image/png' || material.content_type === 'image/jpeg') return 'Saved description only; image contents have no OCR'
@@ -20,6 +20,7 @@ export function resourceAnalysisMode(material: SavedProfile['materials'][number]
 }
 
 export function sourceAnalysisNote(source:{content_status:string;detail?:string}) {
+  if(source.content_status==='profile_completion_bonus')return '+2 LinkedIn profile-completion points; page not fetched or AI-verified.'
   if(source.content_status==='public_github_metadata')return 'Retrieved public GitHub bio and recent repository metadata. Not verified authorship or proficiency.'
   if(source.content_status==='public_profile_text')return 'Retrieved publicly accessible professional profile text (bounded sample).'
   if(source.content_status==='not_analyzed')return 'Not analyzed. '+(source.detail ?? 'No readable public content was available.')
