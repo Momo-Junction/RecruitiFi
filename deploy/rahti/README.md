@@ -25,7 +25,8 @@ operator. This is a shared event demo: **synthetic candidates and documents only
 - `backend/container_start.py`: non-root/data-path checks, group-write umask,
   explicit hosted-mode blocker, single Uvicorn worker, 8080/0.0.0.0 binding.
 - Minimal application deployment changes: health endpoint, conditional static
-  mount after API routes, production-relative API base URL. No schema, scoring,
+  mount after API routes gated by the container-only `TALENTMATCH_SERVE_FRONTEND=1`
+  image environment variable, production-relative API base URL. No schema, scoring,
   UI, authentication or API request/response changes were made.
 
 The repository documents pnpm, has a v9 pnpm lockfile and pnpm workspace build
@@ -120,6 +121,8 @@ curl --fail http://127.0.0.1:8080/api/companies
 # A fresh DB returns an empty directory until explicitly seeded.
 ```
 
+The image enables static serving with `TALENTMATCH_SERVE_FRONTEND=1`. Without
+that flag, local Uvicorn retains the original root 404 even if frontend/dist exists.
 Production build sets `VITE_API_URL` to an empty string; API calls use relative
 `/api/...` URLs on the HTTPS origin. Runtime VITE variables cannot change a built
 bundle. Local Vite development retains the localhost API fallback. No CORS
@@ -427,7 +430,7 @@ authorized cluster test. End-to-end hosted access is blocked by missing auth.
 | Frontend production build | PASS | Node 22 build inside Docker; no development API host in bundle |
 | Backend checks | PASS | 10 tests on host and inside Python 3.13 image |
 | Arbitrary non-root identity | PASS locally | UID 1000620000 then 1000620001, group 0, read-only rootfs |
-| Persistence | PASS locally | Same disposable volume, synthetic BLOB download after recreation, changed-UID write |
+| Persistence | PASS locally | Same disposable volume, WAL mode, synthetic BLOB after recreation, changed-UID write |
 | Backup | PASS locally | SQLite backup API, integrity check and restore into an in-memory DB |
 | Missing password/root/hosted guard | PASS | All fail clearly without exposing an unauthenticated hosted server |
 | Image content audit | PASS | No DB/env/Git/test files; readable assets and no development API base |
@@ -453,17 +456,86 @@ docker run --rm \
   /manifests/pvc.yaml /manifests/deployment.yaml /manifests/service.yaml
 ```
 
+## Deployment review follow-up (14 November 2026)
+
+Comparison baseline: `be8131b` (the parent of the deployment work). Before review
+fixes, the deployment range contained 16 one-file commits. Review found and fixed
+only two operational regressions:
+
+1. An explicitly empty VITE_API_URL in development had lost the original localhost
+   fallback. The original `||` behavior is restored; production still uses same origin.
+2. A local backend would serve frontend/dist whenever it existed. Static serving
+   now requires TALENTMATCH_SERVE_FRONTEND=1, set only by the container image.
+
+No existing API handler body was changed: an AST comparison against baseline
+passes after excluding new operational imports, /healthz and the static mount.
+Matching/scoring, schema, database connection, profile/document implementation,
+seed implementation, package.json and both lockfiles are byte-identical to baseline.
+The only frontend source change is the API base URL expression; no UI file changed.
+Adding /healthz and container-only static serving are intentional deployment HTTP
+additions, not a claim that literally no HTTP surface was added.
+
+Rebuilt reviewed image: `linux/amd64`. Host and image each pass 10 backend tests.
+The container test now additionally fetches the compiled JS asset and rejects a
+development API host in it; SQLite WAL mode is enabled on the disposable test DB
+before persistence is verified. Static serving, uploads, WAL persistence, replacement
+UID writes, backup/integrity checks and expected startup failures all pass.
+Local Uvicorn and Vite were also started on loopback ports 18081 and 5199 with a
+temporary DB, no password and no static-serving flag. Both started; the API and
+Vite module loaded; local backend / remained 404. Only those test processes were
+stopped. Browser interaction/visual QA was not performed in this infrastructure review.
+
+Commands and results (from repository root; Docker commands access only local Docker):
+
+```sh
+# PASS: deployment scope and whitespace review
+git diff --stat be8131b
+git diff --check
+# PASS: no tracked DB, private key or local environment files (no output)
+git ls-files '*.sqlite*' '*.db' '*.pem' '*.key' '.env' '**/.env'
+# PASS: Docker static checks and amd64 build
+docker buildx build --check .
+docker buildx build --platform linux/amd64 --load -t recruitifi:rahti-local .
+# PASS: synthetic test, including WAL persistence and UID replacement
+python3 deploy/rahti/test_container.py recruitifi:rahti-local
+# PASS: 10 host backend/preflight tests
+backend/.venv/bin/python -m unittest discover -s backend -t . -p 'test_*.py' -v
+# PASS: same 10 tests inside final runtime (test files mounted only for this check)
+docker run --rm --platform linux/amd64 --user 1000620000:0 --read-only \
+  --tmpfs /tmp:rw,size=64m,mode=1770,uid=1000620000,gid=0 --entrypoint python \
+  --mount type=bind,src="$PWD/backend/test_swipes.py",dst=/app/backend/test_swipes.py,readonly \
+  --mount type=bind,src="$PWD/backend/test_container_start.py",dst=/app/backend/test_container_start.py,readonly \
+  recruitifi:rahti-local -m unittest discover -s backend -t . -p 'test_*.py' -v
+# PASS: strict core schemas (3 valid, 0 invalid/errors/skipped)
+docker run --rm --platform linux/arm64 \
+  --mount type=bind,src="$PWD/deploy/rahti",dst=/manifests,readonly \
+  ghcr.io/yannh/kubeconform:v0.6.7 -strict -summary \
+  /manifests/pvc.yaml /manifests/deployment.yaml /manifests/service.yaml
+# PASS: redacted deployment commit secret scan; initially 16 commits, no leaks
+docker run --rm --platform linux/arm64 \
+  --mount type=bind,src="$PWD",dst=/repo,readonly \
+  zricethezav/gitleaks:v8.24.3 git /repo --log-opts=be8131b..HEAD --redact --no-banner
+```
+
+Use native validator architecture on other machines; linux/arm64 above is for this
+Apple Silicon host, not the application image architecture. All four manifests
+also parsed as YAML and passed selector/port/Secret/PVC/security/resource policy
+assertions. Existing Route schema/admission limitations remain as reported above.
+No CSC endpoint was contacted. No manifests were applied. **Overall public Rahti
+deployment: FAIL / blocked by absent hosted authentication.** Actual SCC/CSI/TLS,
+Route admission and cluster deployment remain **NOT TESTED**.
+
 ### Exact existing application source diff
 
-These are the only changes to existing application source. They are needed
-because this checkout has neither static serving nor a health endpoint, and its
-production frontend otherwise targets the visitor's localhost. The container-only
-launcher is new operational code in `backend/container_start.py`, not a replacement
-for matching, authorization or profile logic.
+The following is the entire diff to existing application source against the
+pre-deployment baseline. These operational additions are required because the
+baseline has neither production static serving nor /healthz and defaults the
+production API to localhost. The new container-only launcher remains separately
+reviewable in `backend/container_start.py`.
 
 ```diff
 diff --git a/backend/main.py b/backend/main.py
-index 3543504..f584611 100644
+index 3543504..4db786e 100644
 --- a/backend/main.py
 +++ b/backend/main.py
 @@ -1,10 +1,12 @@
@@ -492,10 +564,10 @@ index 3543504..f584611 100644
 +
 +# Container builds supply these assets; local Vite development is unchanged.
 +_frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
-+if (_frontend_dist / "index.html").is_file():
++if os.environ.get("TALENTMATCH_SERVE_FRONTEND") == "1" and (_frontend_dist / "index.html").is_file():
 +    app.mount("/", StaticFiles(directory=_frontend_dist, html=True), name="frontend")
 diff --git a/frontend/src/api.ts b/frontend/src/api.ts
-index fdce1a4..9655361 100644
+index fdce1a4..8e62dfd 100644
 --- a/frontend/src/api.ts
 +++ b/frontend/src/api.ts
 @@ -85,7 +85,7 @@ export interface Match {
@@ -503,7 +575,7 @@ index fdce1a4..9655361 100644
  }
  
 -const apiUrl = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
-+const apiUrl = (import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? '' : 'http://127.0.0.1:8000')).replace(/\/$/, '')
++const apiUrl = (import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://127.0.0.1:8000')).replace(/\/$/, '')
  
  export type MaterialCategory = 'cv' | 'project' | 'certificate' | 'research' | 'linkedin' | 'github' | 'website'
  export interface ProfileMaterial {
