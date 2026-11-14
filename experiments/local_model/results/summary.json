@@ -1,0 +1,1005 @@
+{
+  "timestamp_utc": "2026-11-14T13:58:22.300583+00:00",
+  "hardware": {
+    "os": "macOS-26.6.2-arm64-arm-64bit",
+    "architecture": "arm64",
+    "cpu": "Apple M1",
+    "logical_cpus": 8,
+    "physical_memory_bytes": 17179869184
+  },
+  "rahti_reference_limits": {
+    "cpu_millicores": 500,
+    "memory_mib": 512,
+    "replicas": 1
+  },
+  "results": [
+    {
+      "runtime": "torch",
+      "python": "3.12.14 (main, Aug 12 2026, 13:57:54) [Clang 21.0.0 (clang-2100.1.1.101)]",
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "architecture": "arm64",
+      "provider": "PyTorch CPU, one intra-op/inter-op thread",
+      "threads": 1,
+      "model_artifact": "model.safetensors",
+      "model_revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+      "max_sequence_length": 256,
+      "embedding_dimensions": 384,
+      "offline": {
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "os_probe": {
+          "blocked": true,
+          "errno": 1,
+          "mechanism": "macOS sandbox-exec deny network*"
+        },
+        "python_guard_verified": true,
+        "network_attempts_during_inference": 0
+      },
+      "runtime_import_seconds": 15.0398482910241,
+      "model_load_seconds": 5.5330006669973955,
+      "startup_to_ready_seconds": 20.57284958299715,
+      "first_sample_batch_ms": 99.96866597793996,
+      "baseline_rss_mib_after_numpy": 29.53125,
+      "rss_after_model_load_mib": 319.984375,
+      "peak_process_rss_mib": 607.328125,
+      "cases": [
+        {
+          "profile": "short",
+          "batch_size": 1,
+          "tokens_per_sequence_padded": 13,
+          "repeats": 30,
+          "median_ms": 4.288979020202532,
+          "p95_ms": 4.753502199309878,
+          "min_ms": 4.180083051323891,
+          "cpu_seconds": 0.13056599999999996,
+          "wall_seconds": 0.13068554201163352,
+          "cpu_percent_one_core": 99.90852698026617,
+          "current_rss_mib": 368.359375,
+          "peak_rss_mib": 368.359375
+        },
+        {
+          "profile": "short",
+          "batch_size": 3,
+          "tokens_per_sequence_padded": 13,
+          "repeats": 30,
+          "median_ms": 5.603312485618517,
+          "p95_ms": 5.721391717088409,
+          "min_ms": 5.493125005159527,
+          "cpu_seconds": 0.16867300000000007,
+          "wall_seconds": 0.16877399996155873,
+          "cpu_percent_one_core": 99.94015668196424,
+          "current_rss_mib": 368.375,
+          "peak_rss_mib": 368.375
+        },
+        {
+          "profile": "short",
+          "batch_size": 16,
+          "tokens_per_sequence_padded": 13,
+          "repeats": 30,
+          "median_ms": 14.399228995898739,
+          "p95_ms": 24.596685625147046,
+          "min_ms": 13.504665985237807,
+          "cpu_seconds": 0.46309999999999985,
+          "wall_seconds": 0.4703725840081461,
+          "cpu_percent_one_core": 98.45386736910238,
+          "current_rss_mib": 368.484375,
+          "peak_rss_mib": 369.953125
+        },
+        {
+          "profile": "short",
+          "batch_size": 32,
+          "tokens_per_sequence_padded": 13,
+          "repeats": 30,
+          "median_ms": 25.14683347544633,
+          "p95_ms": 25.432871363591403,
+          "min_ms": 23.976499971468,
+          "cpu_seconds": 0.7476569999999998,
+          "wall_seconds": 0.7482026250218041,
+          "cpu_percent_one_core": 99.92707523289049,
+          "current_rss_mib": 373.4375,
+          "peak_rss_mib": 373.4375
+        },
+        {
+          "profile": "max_256_tokens",
+          "batch_size": 1,
+          "tokens_per_sequence_padded": 256,
+          "repeats": 15,
+          "median_ms": 22.018166026100516,
+          "p95_ms": 22.295775095699355,
+          "min_ms": 21.71104197623208,
+          "cpu_seconds": 0.33047000000000004,
+          "wall_seconds": 0.3307998329983093,
+          "cpu_percent_one_core": 99.90029227181897,
+          "current_rss_mib": 377.171875,
+          "peak_rss_mib": 377.171875
+        },
+        {
+          "profile": "max_256_tokens",
+          "batch_size": 3,
+          "tokens_per_sequence_padded": 256,
+          "repeats": 15,
+          "median_ms": 60.7479169848375,
+          "p95_ms": 61.886521440465,
+          "min_ms": 57.48529196716845,
+          "cpu_seconds": 0.9031880000000001,
+          "wall_seconds": 0.9042518750065938,
+          "cpu_percent_one_core": 99.88234749233051,
+          "current_rss_mib": 386.59375,
+          "peak_rss_mib": 386.59375
+        },
+        {
+          "profile": "max_256_tokens",
+          "batch_size": 16,
+          "tokens_per_sequence_padded": 256,
+          "repeats": 15,
+          "median_ms": 322.55954103311524,
+          "p95_ms": 347.26744541549124,
+          "min_ms": 307.63212498277426,
+          "cpu_seconds": 4.893556,
+          "wall_seconds": 4.914998958003707,
+          "cpu_percent_one_core": 99.56372405799215,
+          "current_rss_mib": 453.5625,
+          "peak_rss_mib": 473.4375
+        },
+        {
+          "profile": "max_256_tokens",
+          "batch_size": 32,
+          "tokens_per_sequence_padded": 256,
+          "repeats": 15,
+          "median_ms": 631.3090840121731,
+          "p95_ms": 741.0954963765106,
+          "min_ms": 620.5786250066012,
+          "cpu_seconds": 9.581054,
+          "wall_seconds": 9.757850792026147,
+          "cpu_percent_one_core": 98.18815848085501,
+          "current_rss_mib": 398.90625,
+          "peak_rss_mib": 607.328125
+        }
+      ],
+      "synthetic_descriptions": [
+        "Developed REST APIs using Python and FastAPI.",
+        "Built React interfaces using TypeScript.",
+        "Created Docker container configurations."
+      ],
+      "synthetic_requirements": [
+        "Python and FastAPI REST API development.",
+        "React and TypeScript frontend development.",
+        "Docker container configuration and deployment.",
+        "Food hygiene and restaurant kitchen cleaning."
+      ],
+      "similarity_matrix": [
+        [
+          0.9509046077728271,
+          0.212176114320755,
+          0.10271787643432617,
+          0.1071397215127945
+        ],
+        [
+          0.14674055576324463,
+          0.7818998098373413,
+          0.03024441748857498,
+          0.049036331474781036
+        ],
+        [
+          0.07204388082027435,
+          0.09033459424972534,
+          0.7763559222221375,
+          0.0030129756778478622
+        ]
+      ],
+      "dependency_versions": {
+        "torch": "2.15.0",
+        "transformers": "5.23.0",
+        "onnxruntime": "1.32.0",
+        "tokenizers": "0.23.3",
+        "numpy": "2.5.4",
+        "psutil": "7.2.2",
+        "safetensors": "0.8.0",
+        "huggingface-hub": "2.4.0"
+      },
+      "method": "Fresh process per runtime; local files only; tokenizer + forward + attention-mask mean pooling + L2 normalization included in timings. Imports/model loading reported separately. No GPU/MPS/CoreML.",
+      "max_similarity_delta_vs_torch": 0.0,
+      "highest_similarity_skill_indices": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "runtime": "onnx",
+      "python": "3.12.14 (main, Aug 12 2026, 13:57:54) [Clang 21.0.0 (clang-2100.1.1.101)]",
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "architecture": "arm64",
+      "provider": [
+        "CPUExecutionProvider"
+      ],
+      "threads": 1,
+      "model_artifact": "onnx/model.onnx",
+      "model_revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+      "max_sequence_length": 256,
+      "embedding_dimensions": 384,
+      "offline": {
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "os_probe": {
+          "blocked": true,
+          "errno": 1,
+          "mechanism": "macOS sandbox-exec deny network*"
+        },
+        "python_guard_verified": true,
+        "network_attempts_during_inference": 0
+      },
+      "runtime_import_seconds": 1.2229371669818647,
+      "model_load_seconds": 0.0961554580135271,
+      "startup_to_ready_seconds": 1.3190940839704126,
+      "first_sample_batch_ms": 27.52862498164177,
+      "baseline_rss_mib_after_numpy": 32.25,
+      "rss_after_model_load_mib": 208.15625,
+      "peak_process_rss_mib": 592.8125,
+      "cases": [
+        {
+          "profile": "short",
+          "batch_size": 1,
+          "tokens_per_sequence_padded": 13,
+          "repeats": 30,
+          "median_ms": 4.526374483248219,
+          "p95_ms": 5.043255983036943,
+          "min_ms": 4.455833986867219,
+          "cpu_seconds": 0.137791,
+          "wall_seconds": 0.1381327910348773,
+          "cpu_percent_one_core": 99.75256343384027,
+          "current_rss_mib": 211.09375,
+          "peak_rss_mib": 211.09375
+        },
+        {
+          "profile": "short",
+          "batch_size": 3,
+          "tokens_per_sequence_padded": 13,
+          "repeats": 30,
+          "median_ms": 12.051249999785796,
+          "p95_ms": 16.93152688676491,
+          "min_ms": 11.852166964672506,
+          "cpu_seconds": 0.37617600000000007,
+          "wall_seconds": 0.3855475830496289,
+          "cpu_percent_one_core": 97.56927978240691,
+          "current_rss_mib": 211.0625,
+          "peak_rss_mib": 211.140625
+        },
+        {
+          "profile": "short",
+          "batch_size": 16,
+          "tokens_per_sequence_padded": 13,
+          "repeats": 30,
+          "median_ms": 56.61629149108194,
+          "p95_ms": 69.60819998057555,
+          "min_ms": 55.39379100082442,
+          "cpu_seconds": 1.7257319999999998,
+          "wall_seconds": 1.7681290420005098,
+          "cpu_percent_one_core": 97.6021522754617,
+          "current_rss_mib": 97.171875,
+          "peak_rss_mib": 214.5625
+        },
+        {
+          "profile": "short",
+          "batch_size": 32,
+          "tokens_per_sequence_padded": 13,
+          "repeats": 30,
+          "median_ms": 112.54864602233283,
+          "p95_ms": 115.91389362001792,
+          "min_ms": 110.39216700010002,
+          "cpu_seconds": 3.386197,
+          "wall_seconds": 3.4011959170456976,
+          "cpu_percent_one_core": 99.55901049479309,
+          "current_rss_mib": 105.0625,
+          "peak_rss_mib": 214.5625
+        },
+        {
+          "profile": "max_256_tokens",
+          "batch_size": 1,
+          "tokens_per_sequence_padded": 256,
+          "repeats": 15,
+          "median_ms": 79.5169579796493,
+          "p95_ms": 89.63215820258482,
+          "min_ms": 78.17550003528595,
+          "cpu_seconds": 1.2101990000000002,
+          "wall_seconds": 1.2179480839986354,
+          "cpu_percent_one_core": 99.36375908789196,
+          "current_rss_mib": 114.125,
+          "peak_rss_mib": 214.5625
+        },
+        {
+          "profile": "max_256_tokens",
+          "batch_size": 3,
+          "tokens_per_sequence_padded": 256,
+          "repeats": 15,
+          "median_ms": 240.57279102271423,
+          "p95_ms": 251.46480007097122,
+          "min_ms": 236.50375002762303,
+          "cpu_seconds": 3.6470219999999998,
+          "wall_seconds": 3.637152207957115,
+          "cpu_percent_one_core": 100.27136043471847,
+          "current_rss_mib": 149.265625,
+          "peak_rss_mib": 214.5625
+        },
+        {
+          "profile": "max_256_tokens",
+          "batch_size": 16,
+          "tokens_per_sequence_padded": 256,
+          "repeats": 15,
+          "median_ms": 1365.948542021215,
+          "p95_ms": 1503.8598792685661,
+          "min_ms": 1333.7122500524856,
+          "cpu_seconds": 20.636118,
+          "wall_seconds": 20.824427624989767,
+          "cpu_percent_one_core": 99.09572724695785,
+          "current_rss_mib": 317.890625,
+          "peak_rss_mib": 338.75
+        },
+        {
+          "profile": "max_256_tokens",
+          "batch_size": 32,
+          "tokens_per_sequence_padded": 256,
+          "repeats": 15,
+          "median_ms": 2890.1496669859625,
+          "p95_ms": 3053.1240707845423,
+          "min_ms": 2825.5486669950187,
+          "cpu_seconds": 43.089584,
+          "wall_seconds": 43.63707233394962,
+          "cpu_percent_one_core": 98.74535961129621,
+          "current_rss_mib": 424.09375,
+          "peak_rss_mib": 592.8125
+        }
+      ],
+      "synthetic_descriptions": [
+        "Developed REST APIs using Python and FastAPI.",
+        "Built React interfaces using TypeScript.",
+        "Created Docker container configurations."
+      ],
+      "synthetic_requirements": [
+        "Python and FastAPI REST API development.",
+        "React and TypeScript frontend development.",
+        "Docker container configuration and deployment.",
+        "Food hygiene and restaurant kitchen cleaning."
+      ],
+      "similarity_matrix": [
+        [
+          0.9509047269821167,
+          0.2121761590242386,
+          0.10271803289651871,
+          0.10713975131511688
+        ],
+        [
+          0.1467406451702118,
+          0.7818998098373413,
+          0.030244331806898117,
+          0.04903644323348999
+        ],
+        [
+          0.07204405963420868,
+          0.09033451229333878,
+          0.7763558030128479,
+          0.0030130241066217422
+        ]
+      ],
+      "dependency_versions": {
+        "torch": "2.15.0",
+        "transformers": "5.23.0",
+        "onnxruntime": "1.32.0",
+        "tokenizers": "0.23.3",
+        "numpy": "2.5.4",
+        "psutil": "7.2.2",
+        "safetensors": "0.8.0",
+        "huggingface-hub": "2.4.0"
+      },
+      "method": "Fresh process per runtime; local files only; tokenizer + forward + attention-mask mean pooling + L2 normalization included in timings. Imports/model loading reported separately. No GPU/MPS/CoreML.",
+      "max_similarity_delta_vs_torch": 1.7881393432617188e-07,
+      "highest_similarity_skill_indices": [
+        0,
+        1,
+        2
+      ]
+    },
+    {
+      "runtime": "onnx-int8",
+      "python": "3.12.14 (main, Aug 12 2026, 13:57:54) [Clang 21.0.0 (clang-2100.1.1.101)]",
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "architecture": "arm64",
+      "provider": [
+        "CPUExecutionProvider"
+      ],
+      "threads": 1,
+      "model_artifact": "onnx/model_qint8_arm64.onnx",
+      "model_revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+      "max_sequence_length": 256,
+      "embedding_dimensions": 384,
+      "offline": {
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "os_probe": {
+          "blocked": true,
+          "errno": 1,
+          "mechanism": "macOS sandbox-exec deny network*"
+        },
+        "python_guard_verified": true,
+        "network_attempts_during_inference": 0
+      },
+      "runtime_import_seconds": 0.08167141699232161,
+      "model_load_seconds": 0.06680395896546543,
+      "startup_to_ready_seconds": 0.14847683400148526,
+      "first_sample_batch_ms": 11.263708001933992,
+      "baseline_rss_mib_after_numpy": 32.3125,
+      "rss_after_model_load_mib": 110.953125,
+      "peak_process_rss_mib": 590.125,
+      "cases": [
+        {
+          "profile": "short",
+          "batch_size": 1,
+          "tokens_per_sequence_padded": 13,
+          "repeats": 30,
+          "median_ms": 1.8264375103171915,
+          "p95_ms": 2.3296141036553304,
+          "min_ms": 1.802499988116324,
+          "cpu_seconds": 0.05766200000000002,
+          "wall_seconds": 0.05772825004532933,
+          "cpu_percent_one_core": 99.88523808485917,
+          "current_rss_mib": 114.671875,
+          "peak_rss_mib": 114.671875
+        },
+        {
+          "profile": "short",
+          "batch_size": 3,
+          "tokens_per_sequence_padded": 13,
+          "repeats": 30,
+          "median_ms": 4.868666495895013,
+          "p95_ms": 5.410681382636539,
+          "min_ms": 4.78754099458456,
+          "cpu_seconds": 0.148013,
+          "wall_seconds": 0.14842537499498576,
+          "cpu_percent_one_core": 99.72216678246582,
+          "current_rss_mib": 114.6875,
+          "peak_rss_mib": 114.6875
+        },
+        {
+          "profile": "short",
+          "batch_size": 16,
+          "tokens_per_sequence_padded": 13,
+          "repeats": 30,
+          "median_ms": 23.13874999526888,
+          "p95_ms": 25.454220804385834,
+          "min_ms": 22.68945798277855,
+          "cpu_seconds": 0.7105700000000001,
+          "wall_seconds": 0.7134884589468129,
+          "cpu_percent_one_core": 99.59095919349267,
+          "current_rss_mib": 118.140625,
+          "peak_rss_mib": 118.140625
+        },
+        {
+          "profile": "short",
+          "batch_size": 32,
+          "tokens_per_sequence_padded": 13,
+          "repeats": 30,
+          "median_ms": 45.70879149832763,
+          "p95_ms": 46.80754376749974,
+          "min_ms": 44.87333301221952,
+          "cpu_seconds": 1.3749950000000002,
+          "wall_seconds": 1.3760754160466604,
+          "cpu_percent_one_core": 99.92148569518346,
+          "current_rss_mib": 118.8125,
+          "peak_rss_mib": 118.8125
+        },
+        {
+          "profile": "max_256_tokens",
+          "batch_size": 1,
+          "tokens_per_sequence_padded": 256,
+          "repeats": 15,
+          "median_ms": 36.7167079821229,
+          "p95_ms": 54.22209110110997,
+          "min_ms": 35.93462496064603,
+          "cpu_seconds": 0.5771930000000003,
+          "wall_seconds": 0.602405333018396,
+          "cpu_percent_one_core": 95.81472280597725,
+          "current_rss_mib": 119.421875,
+          "peak_rss_mib": 119.421875
+        },
+        {
+          "profile": "max_256_tokens",
+          "batch_size": 3,
+          "tokens_per_sequence_padded": 256,
+          "repeats": 15,
+          "median_ms": 107.44975000852719,
+          "p95_ms": 109.1034248820506,
+          "min_ms": 105.23495799861848,
+          "cpu_seconds": 1.6105869999999998,
+          "wall_seconds": 1.6128765829489566,
+          "cpu_percent_one_core": 99.85804351224627,
+          "current_rss_mib": 155.15625,
+          "peak_rss_mib": 155.15625
+        },
+        {
+          "profile": "max_256_tokens",
+          "batch_size": 16,
+          "tokens_per_sequence_padded": 256,
+          "repeats": 15,
+          "median_ms": 584.7041660454124,
+          "p95_ms": 622.2162623947952,
+          "min_ms": 576.236583001446,
+          "cpu_seconds": 8.825306999999999,
+          "wall_seconds": 8.890963000012562,
+          "cpu_percent_one_core": 99.26154230973101,
+          "current_rss_mib": 316.53125,
+          "peak_rss_mib": 351.484375
+        },
+        {
+          "profile": "max_256_tokens",
+          "batch_size": 32,
+          "tokens_per_sequence_padded": 256,
+          "repeats": 15,
+          "median_ms": 1193.9985000062734,
+          "p95_ms": 1224.8452918662224,
+          "min_ms": 1183.2008750061505,
+          "cpu_seconds": 17.895811999999996,
+          "wall_seconds": 17.974660916021094,
+          "cpu_percent_one_core": 99.56133294313875,
+          "current_rss_mib": 579.34375,
+          "peak_rss_mib": 590.125
+        }
+      ],
+      "synthetic_descriptions": [
+        "Developed REST APIs using Python and FastAPI.",
+        "Built React interfaces using TypeScript.",
+        "Created Docker container configurations."
+      ],
+      "synthetic_requirements": [
+        "Python and FastAPI REST API development.",
+        "React and TypeScript frontend development.",
+        "Docker container configuration and deployment.",
+        "Food hygiene and restaurant kitchen cleaning."
+      ],
+      "similarity_matrix": [
+        [
+          0.9471811056137085,
+          0.20366421341896057,
+          0.07615548372268677,
+          0.11617231369018555
+        ],
+        [
+          0.1557941734790802,
+          0.789280891418457,
+          0.03473304212093353,
+          0.06811177730560303
+        ],
+        [
+          0.08021104335784912,
+          0.1025693342089653,
+          0.7694562077522278,
+          -0.0009251460433006287
+        ]
+      ],
+      "dependency_versions": {
+        "torch": "2.15.0",
+        "transformers": "5.23.0",
+        "onnxruntime": "1.32.0",
+        "tokenizers": "0.23.3",
+        "numpy": "2.5.4",
+        "psutil": "7.2.2",
+        "safetensors": "0.8.0",
+        "huggingface-hub": "2.4.0"
+      },
+      "method": "Fresh process per runtime; local files only; tokenizer + forward + attention-mask mean pooling + L2 normalization included in timings. Imports/model loading reported separately. No GPU/MPS/CoreML.",
+      "max_similarity_delta_vs_torch": 0.026562392711639404,
+      "highest_similarity_skill_indices": [
+        0,
+        1,
+        2
+      ]
+    }
+  ],
+  "bounded_batch_results": [
+    {
+      "runtime": "torch",
+      "python": "3.12.14 (main, Aug 12 2026, 13:57:54) [Clang 21.0.0 (clang-2100.1.1.101)]",
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "architecture": "arm64",
+      "provider": "PyTorch CPU, one intra-op/inter-op thread",
+      "threads": 1,
+      "batch_sizes": [
+        1,
+        3
+      ],
+      "model_artifact": "model.safetensors",
+      "model_revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+      "max_sequence_length": 256,
+      "embedding_dimensions": 384,
+      "offline": {
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "os_probe": {
+          "blocked": true,
+          "errno": 1,
+          "mechanism": "macOS sandbox-exec deny network*"
+        },
+        "python_guard_verified": true,
+        "network_attempts_during_inference": 0
+      },
+      "runtime_import_seconds": 2.062795208999887,
+      "model_load_seconds": 1.060992749989964,
+      "startup_to_ready_seconds": 3.123788708995562,
+      "first_sample_batch_ms": 114.11516601219773,
+      "baseline_rss_mib_after_numpy": 32.40625,
+      "rss_after_model_load_mib": 337.046875,
+      "peak_process_rss_mib": 395.0625,
+      "cases": [
+        {
+          "profile": "short",
+          "batch_size": 1,
+          "tokens_per_sequence_padded": 13,
+          "repeats": 30,
+          "median_ms": 4.257437511114404,
+          "p95_ms": 4.519147984683514,
+          "min_ms": 4.035208025015891,
+          "cpu_seconds": 0.1289690000000001,
+          "wall_seconds": 0.12906029203440994,
+          "cpu_percent_one_core": 99.92926404165776,
+          "current_rss_mib": 384.5625,
+          "peak_rss_mib": 384.5625
+        },
+        {
+          "profile": "short",
+          "batch_size": 3,
+          "tokens_per_sequence_padded": 13,
+          "repeats": 30,
+          "median_ms": 5.34095847979188,
+          "p95_ms": 5.67944998620078,
+          "min_ms": 5.236249999143183,
+          "cpu_seconds": 0.1619240000000004,
+          "wall_seconds": 0.16198516701115295,
+          "cpu_percent_one_core": 99.96223912826022,
+          "current_rss_mib": 384.578125,
+          "peak_rss_mib": 384.578125
+        },
+        {
+          "profile": "max_256_tokens",
+          "batch_size": 1,
+          "tokens_per_sequence_padded": 256,
+          "repeats": 15,
+          "median_ms": 21.903916029259562,
+          "p95_ms": 22.49148749979213,
+          "min_ms": 21.684959006961435,
+          "cpu_seconds": 0.3302210000000003,
+          "wall_seconds": 0.3304622499854304,
+          "cpu_percent_one_core": 99.92699620442555,
+          "current_rss_mib": 385.703125,
+          "peak_rss_mib": 389.296875
+        },
+        {
+          "profile": "max_256_tokens",
+          "batch_size": 3,
+          "tokens_per_sequence_padded": 256,
+          "repeats": 15,
+          "median_ms": 60.52025000099093,
+          "p95_ms": 65.56797142256983,
+          "min_ms": 56.82729202089831,
+          "cpu_seconds": 0.9076220000000004,
+          "wall_seconds": 0.910819459008053,
+          "cpu_percent_one_core": 99.64894700300597,
+          "current_rss_mib": 392.484375,
+          "peak_rss_mib": 395.0625
+        }
+      ],
+      "synthetic_descriptions": [
+        "Developed REST APIs using Python and FastAPI.",
+        "Built React interfaces using TypeScript.",
+        "Created Docker container configurations."
+      ],
+      "synthetic_requirements": [
+        "Python and FastAPI REST API development.",
+        "React and TypeScript frontend development.",
+        "Docker container configuration and deployment.",
+        "Food hygiene and restaurant kitchen cleaning."
+      ],
+      "similarity_matrix": [
+        [
+          0.9509046077728271,
+          0.212176114320755,
+          0.10271787643432617,
+          0.1071397215127945
+        ],
+        [
+          0.14674055576324463,
+          0.7818998098373413,
+          0.03024441748857498,
+          0.049036331474781036
+        ],
+        [
+          0.07204388082027435,
+          0.09033459424972534,
+          0.7763559222221375,
+          0.0030129756778478622
+        ]
+      ],
+      "dependency_versions": {
+        "torch": "2.15.0",
+        "transformers": "5.23.0",
+        "onnxruntime": "1.32.0",
+        "tokenizers": "0.23.3",
+        "numpy": "2.5.4",
+        "psutil": "7.2.2",
+        "safetensors": "0.8.0",
+        "huggingface-hub": "2.4.0"
+      },
+      "method": "Fresh process per runtime; local files only; tokenizer + forward + attention-mask mean pooling + L2 normalization included in timings. Imports/model loading reported separately. No GPU/MPS/CoreML."
+    },
+    {
+      "runtime": "onnx",
+      "python": "3.12.14 (main, Aug 12 2026, 13:57:54) [Clang 21.0.0 (clang-2100.1.1.101)]",
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "architecture": "arm64",
+      "provider": [
+        "CPUExecutionProvider"
+      ],
+      "threads": 1,
+      "batch_sizes": [
+        1,
+        3
+      ],
+      "model_artifact": "onnx/model.onnx",
+      "model_revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+      "max_sequence_length": 256,
+      "embedding_dimensions": 384,
+      "offline": {
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "os_probe": {
+          "blocked": true,
+          "errno": 1,
+          "mechanism": "macOS sandbox-exec deny network*"
+        },
+        "python_guard_verified": true,
+        "network_attempts_during_inference": 0
+      },
+      "runtime_import_seconds": 0.1123347079847008,
+      "model_load_seconds": 0.11395233299117535,
+      "startup_to_ready_seconds": 0.2262886249809526,
+      "first_sample_batch_ms": 28.79708301043138,
+      "baseline_rss_mib_after_numpy": 32.203125,
+      "rss_after_model_load_mib": 207.109375,
+      "peak_process_rss_mib": 226.03125,
+      "cases": [
+        {
+          "profile": "short",
+          "batch_size": 1,
+          "tokens_per_sequence_padded": 13,
+          "repeats": 30,
+          "median_ms": 4.5128545025363564,
+          "p95_ms": 4.607312512234785,
+          "min_ms": 4.456500057131052,
+          "cpu_seconds": 0.13572800000000002,
+          "wall_seconds": 0.13580370898125693,
+          "cpu_percent_one_core": 99.94425116823035,
+          "current_rss_mib": 210.6875,
+          "peak_rss_mib": 210.6875
+        },
+        {
+          "profile": "short",
+          "batch_size": 3,
+          "tokens_per_sequence_padded": 13,
+          "repeats": 30,
+          "median_ms": 11.975478962995112,
+          "p95_ms": 13.27264185529202,
+          "min_ms": 11.751375044696033,
+          "cpu_seconds": 0.364678,
+          "wall_seconds": 0.36568200000328943,
+          "cpu_percent_one_core": 99.72544451100124,
+          "current_rss_mib": 210.71875,
+          "peak_rss_mib": 210.734375
+        },
+        {
+          "profile": "max_256_tokens",
+          "batch_size": 1,
+          "tokens_per_sequence_padded": 256,
+          "repeats": 15,
+          "median_ms": 79.72237502690405,
+          "p95_ms": 82.8724376275204,
+          "min_ms": 77.9830840183422,
+          "cpu_seconds": 1.1997149999999999,
+          "wall_seconds": 1.2014037090120837,
+          "cpu_percent_one_core": 99.85943867166246,
+          "current_rss_mib": 181.3125,
+          "peak_rss_mib": 226.03125
+        },
+        {
+          "profile": "max_256_tokens",
+          "batch_size": 3,
+          "tokens_per_sequence_padded": 256,
+          "repeats": 15,
+          "median_ms": 239.0138750197366,
+          "p95_ms": 245.25677867350169,
+          "min_ms": 234.2997919768095,
+          "cpu_seconds": 3.584573,
+          "wall_seconds": 3.589486457989551,
+          "cpu_percent_one_core": 99.86311529387122,
+          "current_rss_mib": 211.03125,
+          "peak_rss_mib": 226.03125
+        }
+      ],
+      "synthetic_descriptions": [
+        "Developed REST APIs using Python and FastAPI.",
+        "Built React interfaces using TypeScript.",
+        "Created Docker container configurations."
+      ],
+      "synthetic_requirements": [
+        "Python and FastAPI REST API development.",
+        "React and TypeScript frontend development.",
+        "Docker container configuration and deployment.",
+        "Food hygiene and restaurant kitchen cleaning."
+      ],
+      "similarity_matrix": [
+        [
+          0.9509047269821167,
+          0.2121761590242386,
+          0.10271803289651871,
+          0.10713975131511688
+        ],
+        [
+          0.1467406451702118,
+          0.7818998098373413,
+          0.030244331806898117,
+          0.04903644323348999
+        ],
+        [
+          0.07204405963420868,
+          0.09033451229333878,
+          0.7763558030128479,
+          0.0030130241066217422
+        ]
+      ],
+      "dependency_versions": {
+        "torch": "2.15.0",
+        "transformers": "5.23.0",
+        "onnxruntime": "1.32.0",
+        "tokenizers": "0.23.3",
+        "numpy": "2.5.4",
+        "psutil": "7.2.2",
+        "safetensors": "0.8.0",
+        "huggingface-hub": "2.4.0"
+      },
+      "method": "Fresh process per runtime; local files only; tokenizer + forward + attention-mask mean pooling + L2 normalization included in timings. Imports/model loading reported separately. No GPU/MPS/CoreML."
+    },
+    {
+      "runtime": "onnx-int8",
+      "python": "3.12.14 (main, Aug 12 2026, 13:57:54) [Clang 21.0.0 (clang-2100.1.1.101)]",
+      "platform": "macOS-26.6.2-arm64-arm-64bit",
+      "architecture": "arm64",
+      "provider": [
+        "CPUExecutionProvider"
+      ],
+      "threads": 1,
+      "batch_sizes": [
+        1,
+        3
+      ],
+      "model_artifact": "onnx/model_qint8_arm64.onnx",
+      "model_revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+      "max_sequence_length": 256,
+      "embedding_dimensions": 384,
+      "offline": {
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "os_probe": {
+          "blocked": true,
+          "errno": 1,
+          "mechanism": "macOS sandbox-exec deny network*"
+        },
+        "python_guard_verified": true,
+        "network_attempts_during_inference": 0
+      },
+      "runtime_import_seconds": 0.07454441697336733,
+      "model_load_seconds": 0.06870445801177993,
+      "startup_to_ready_seconds": 0.1432504170225002,
+      "first_sample_batch_ms": 12.07729201996699,
+      "baseline_rss_mib_after_numpy": 32.046875,
+      "rss_after_model_load_mib": 110.78125,
+      "peak_process_rss_mib": 155.671875,
+      "cases": [
+        {
+          "profile": "short",
+          "batch_size": 1,
+          "tokens_per_sequence_padded": 13,
+          "repeats": 30,
+          "median_ms": 1.8205204978585243,
+          "p95_ms": 1.9394604576518757,
+          "min_ms": 1.800333964638412,
+          "cpu_seconds": 0.05527800000000002,
+          "wall_seconds": 0.05529391602613032,
+          "cpu_percent_one_core": 99.97121559246631,
+          "current_rss_mib": 114.421875,
+          "peak_rss_mib": 114.421875
+        },
+        {
+          "profile": "short",
+          "batch_size": 3,
+          "tokens_per_sequence_padded": 13,
+          "repeats": 30,
+          "median_ms": 4.930458002490923,
+          "p95_ms": 5.297290257294662,
+          "min_ms": 4.818250017706305,
+          "cpu_seconds": 0.14934399999999998,
+          "wall_seconds": 0.14963574998546392,
+          "cpu_percent_one_core": 99.80502654914197,
+          "current_rss_mib": 114.421875,
+          "peak_rss_mib": 114.421875
+        },
+        {
+          "profile": "max_256_tokens",
+          "batch_size": 1,
+          "tokens_per_sequence_padded": 256,
+          "repeats": 15,
+          "median_ms": 35.664458002429456,
+          "p95_ms": 37.892941891914234,
+          "min_ms": 35.09933402528986,
+          "cpu_seconds": 0.5376610000000001,
+          "wall_seconds": 0.538943667022977,
+          "cpu_percent_one_core": 99.76200350770199,
+          "current_rss_mib": 118.359375,
+          "peak_rss_mib": 118.359375
+        },
+        {
+          "profile": "max_256_tokens",
+          "batch_size": 3,
+          "tokens_per_sequence_padded": 256,
+          "repeats": 15,
+          "median_ms": 106.91295802826062,
+          "p95_ms": 108.39259999338537,
+          "min_ms": 105.14545801561326,
+          "cpu_seconds": 1.6031609999999998,
+          "wall_seconds": 1.6048102920176461,
+          "cpu_percent_one_core": 99.89722822530177,
+          "current_rss_mib": 155.03125,
+          "peak_rss_mib": 155.03125
+        }
+      ],
+      "synthetic_descriptions": [
+        "Developed REST APIs using Python and FastAPI.",
+        "Built React interfaces using TypeScript.",
+        "Created Docker container configurations."
+      ],
+      "synthetic_requirements": [
+        "Python and FastAPI REST API development.",
+        "React and TypeScript frontend development.",
+        "Docker container configuration and deployment.",
+        "Food hygiene and restaurant kitchen cleaning."
+      ],
+      "similarity_matrix": [
+        [
+          0.9471811056137085,
+          0.20366421341896057,
+          0.07615548372268677,
+          0.11617231369018555
+        ],
+        [
+          0.1557941734790802,
+          0.789280891418457,
+          0.03473304212093353,
+          0.06811177730560303
+        ],
+        [
+          0.08021104335784912,
+          0.1025693342089653,
+          0.7694562077522278,
+          -0.0009251460433006287
+        ]
+      ],
+      "dependency_versions": {
+        "torch": "2.15.0",
+        "transformers": "5.23.0",
+        "onnxruntime": "1.32.0",
+        "tokenizers": "0.23.3",
+        "numpy": "2.5.4",
+        "psutil": "7.2.2",
+        "safetensors": "0.8.0",
+        "huggingface-hub": "2.4.0"
+      },
+      "method": "Fresh process per runtime; local files only; tokenizer + forward + attention-mask mean pooling + L2 normalization included in timings. Imports/model loading reported separately. No GPU/MPS/CoreML."
+    }
+  ]
+}
