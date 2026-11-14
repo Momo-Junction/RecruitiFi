@@ -5,7 +5,8 @@ export interface DiscoveryCard {
   name: string
   subtitle: string
   monogram: string
-  score: number
+  score: number | null
+  scoreLabel?: string
   eligible: boolean
   likedYou: boolean
   interestLabel?: string
@@ -72,7 +73,7 @@ export function SwipeDeck({ cards, loading, error, onRetry, onDecide, saved, onR
       <div className="swipe-stage">
         {card ? <>
           <div className="swipe-ghost ghost-back" /><div className="swipe-ghost ghost-front" />
-          <article tabIndex={0} aria-label={`${card.name}, ${card.score}% fit. Use left arrow to pass or right arrow to like.`}
+          <article tabIndex={0} aria-label={`${card.name}, ${card.scoreLabel ?? 'Not analyzed'}. Use left arrow to pass or right arrow to like.`}
             className={`swipe-card ${leaving ? `leaving-${leaving}` : ''} ${drag ? 'dragging' : ''}`}
             style={{ '--card-hue': `${(card.id * 47 + 200) % 360}`, transform: leaving ? undefined : `translateX(${drag}px) rotate(${drag / 22}deg)` } as CSSProperties}
             onKeyDown={(event) => { if (event.target !== event.currentTarget) return; if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); void choose(event.key === 'ArrowRight' ? 'like' : 'pass') } }}
@@ -81,11 +82,11 @@ export function SwipeDeck({ cards, loading, error, onRetry, onDecide, saved, onR
             onPointerUp={(event) => { if (pointer.current?.id !== event.pointerId) return; const distance = event.clientX - pointer.current.x; pointer.current = null; if (Math.abs(distance) > 85) void choose(distance > 0 ? 'like' : 'pass'); else setDrag(0) }}
             onLostPointerCapture={() => { pointer.current = null; if (!locked.current) setDrag(0) }}
             onPointerCancel={() => { pointer.current = null; setDrag(0) }}>
-            <div className="swipe-art"><div className="swipe-orbit orbit-one" /><div className="swipe-orbit orbit-two" /><span className="swipe-brand">TALENT / CONNECTIONS</span><span className="swipe-fit"><i />{Number(card.score.toFixed(1))}% fit</span><div className="swipe-monogram">{card.monogram}<span>✦</span></div><div className="swipe-art-caption">GREAT WORK STARTS<br />WITH A CONNECTION.</div>
+            <div className="swipe-art"><div className="swipe-orbit orbit-one" /><div className="swipe-orbit orbit-two" /><span className="swipe-brand">TALENT / CONNECTIONS</span><span className="swipe-fit"><i />{card.scoreLabel ?? 'Not analyzed'}</span><div className="swipe-monogram">{card.monogram}<span>✦</span></div><div className="swipe-art-caption">GREAT WORK STARTS<br />WITH A CONNECTION.</div>
               {(Math.abs(drag) > 35 || leaving) && <span className={`swipe-stamp ${leaving === 'like' || (!leaving && drag > 0) ? 'stamp-like' : 'stamp-pass'}`}>{leaving === 'like' || (!leaving && drag > 0) ? 'LIKE' : 'PASS'}</span>}
             </div>
             <div className="swipe-body"><div className="swipe-kicker">{card.likedYou ? <span className="rounded-full bg-emerald-100 px-2 py-1 text-emerald-900">{card.interestLabel ?? '♥ Already likes you'}</span> : card.eligible ? '✓ Meets the role requirements' : 'Explore your potential'}</div><h3>{card.name}</h3><p className="swipe-subtitle">{card.subtitle}</p><div className="swipe-facts">{card.facts.map((fact) => <span key={fact}>{fact}</span>)}</div>
-              <div className="swipe-skills-title">THE SKILL CONNECTION <span>✓ in common</span></div><div className="swipe-skills">{card.skills.map((skill) => <span key={skill.name} className={skill.matched ? 'skill-common' : ''}>{skill.matched && '✓ '}{skill.priority && `${skill.priority} · `}{skill.name}</span>)}</div>
+              <div className="swipe-skills-title">EVIDENCE RELEVANCE <span>unreviewed</span></div><div className="swipe-skills">{card.skills.map((skill) => <span key={skill.name} className={skill.matched ? 'skill-common' : ''}>{skill.matched && '✓ '}{skill.priority && `${skill.priority} · `}{skill.name}</span>)}</div>
               {card.warnings.length > 0 && <p className="swipe-warning">{card.warnings.join(' · ')}</p>}
               {onReview && <button className="swipe-detail" onClick={() => onReview(card.id)}>Why this match? <span>↗</span></button>}
             </div>
