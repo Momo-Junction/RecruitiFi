@@ -3,7 +3,9 @@
 Hosted startup now uses a minimal shared-demo HTTP Basic gate. With
 `TALENTMATCH_HOSTED_DEMO=1`, the username is `demo` and the password comes only
 from `TALENTMATCH_DEMO_PASSWORD` (the Deployment references a Kubernetes Secret).
-Missing/blank passwords or invalid hosted-mode configuration fail startup.
+When authentication is enabled (the default), missing/blank passwords fail startup.
+Explicit `TALENTMATCH_DEMO_AUTH_ENABLED=false` enables public hackathon access
+without a password; see the final hackathon section for risks and instructions.
 Invalid or missing request credentials return 401 with a browser login challenge.
 The frontend, compiled assets, API, documentation and downloads are protected;
 only exact GET/HEAD `/healthz` is exempt for probes. Authorized hosted responses
@@ -681,3 +683,106 @@ index 4db786e..8ff81a4 100644
  def read_rows(query: str, *json_fields: str, params: tuple = ()):
      with connect() as connection:
 ```
+
+## Optional password-free hackathon mode
+
+Authentication remains enabled by default. With hosted mode `1`, set
+`TALENTMATCH_DEMO_AUTH_ENABLED=false` explicitly to allow public access without
+credentials or a configured password. Set it to `true` (or omit it) to require
+the existing shared `demo` credentials and a nonblank password. Values other than
+true/false fail closed. This flag is server-side only, never a VITE variable.
+
+The hackathon Deployment template now adds exactly:
+
+```yaml
+            - name: TALENTMATCH_DEMO_AUTH_ENABLED
+              value: 'false'
+```
+
+The existing password Secret reference is unchanged. Retain the Secret for later
+re-enabling authentication. Since the reference remains required, Kubernetes still
+needs that Secret object even though the application ignores its password in
+public mode. This does not grant candidate ownership or restrict write operations:
+**any visitor can read shared profiles/documents, change skills/roles, upload or
+delete materials, and change demo decisions.** Use synthetic data only, expect
+shared state to change, and monitor storage usage. Do not publish real documents,
+private links or personal data. Password-free access is an intentional hackathon
+choice, not a production security configuration.
+
+### Why Organizer starts with zero introductions
+
+Organizer loads `GET /api/companies/{id}/matches` for every company and filters
+`dealbreakers_passed && meets_threshold`. It then assigns at most one suggestion
+per employer and candidate, trying companies with fewer options first. It does
+not read swipe decisions; likes and mutual matches are not prerequisites.
+
+Saved-profile construction deliberately downgrades legacy seed skill evidence to
+self-declared until saved supporting materials exist. It derives CV/portfolio
+availability from actual saved materials, not legacy seed booleans. With no
+materials, even all 90 skill-weight points at multiplier 0.7 yield at most 63,
+with zero profile-proof points. The seeded company thresholds are 70–75. Thus
+15 candidates / 8 companies / 40 skills with no materials legitimately gives zero
+introductions and eight booths needing help. The endpoint and frontend field
+names agree; no matching/filter bug was found. Live API inspection without
+credentials returned 401; this diagnosis was reproduced on an isolated seeded DB,
+not by modifying or inspecting the deployed database's private records.
+
+For a repeatable synthetic demonstration without changing thresholds:
+
+1. Select Aino Lehtinen / Talent #402 in Talent View.
+2. In Projects, save clearly labelled synthetic project materials linked separately
+   to Quantum circuit programming with Qiskit, Python and Digital Signal Processing.
+   Use valid demo project links or supported synthetic files, not just listed skills.
+3. These three must-have skills then receive portfolio evidence. With Aino's
+   existing C++ claim and portfolio proof, Kide Quantum Labs scores 75 and the
+   English/visa requirements pass, meeting its existing 75 threshold.
+4. Open Espoo Organizer and click **Refresh suggestions**. An introduction is now
+   eligible with no swipes or likes needed. Shortlisting is optional UI state.
+
+This exact path is covered by a regression test against real API responses on a
+disposable seeded database. Do not lower thresholds or fabricate certificate claims
+to make the count increase. Existing edited event data may produce other scores.
+
+### Local verification and later safe update
+
+```sh
+backend/.venv/bin/python -m unittest discover -s backend -t . -p 'test_*.py' -v
+(cd frontend && npm test && npm run build)
+docker buildx build --platform linux/amd64 --load -t recruitifi:hackathon .
+python3 -B deploy/rahti/test_container.py recruitifi:hackathon
+```
+
+The extended container test keeps authenticated-mode checks and adds hosted public
+startup without a password, public HTML/API/document access, and a synthetic write.
+All use temporary local volumes; no existing data is reset.
+
+The following are **operator commands only**, not executed during preparation.
+Use the existing project, registry and Deployment; do not recreate the PVC or seed
+the existing event. Choose a unique tag and rebuild the image before changing mode:
+
+```sh
+# After your normal oc login; verify the selected project is the existing demo.
+oc project
+RAHTI_NAMESPACE=$(oc project -q)
+RELEASE="hackathon-$(date -u +%Y%m%dT%H%M%SZ)"
+REGISTRY=image-registry.apps.2.rahti.csc.fi
+oc whoami -t | docker login --username unused --password-stdin "$REGISTRY"
+docker buildx build --platform linux/amd64 --load \
+  -t "$REGISTRY/$RAHTI_NAMESPACE/recruitifi:$RELEASE" .
+docker push "$REGISTRY/$RAHTI_NAMESPACE/recruitifi:$RELEASE"
+INTERNAL_IMAGE="image-registry.openshift-image-registry.svc:5000/$RAHTI_NAMESPACE/recruitifi:$RELEASE"
+# One pod-template update; preserves the existing Secret reference, PVC and strategy.
+oc patch deployment recruitifi --type=strategic \
+  -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"recruitifi\",\"image\":\"$INTERNAL_IMAGE\",\"env\":[{\"name\":\"TALENTMATCH_DEMO_AUTH_ENABLED\",\"value\":\"false\"}]}]}}}}"
+oc rollout status deployment/recruitifi --timeout=180s
+oc logs deployment/recruitifi --tail=50
+curl --fail https://recruitifi-recruitifi-demo.2.rahtiapp.fi/healthz
+curl --fail https://recruitifi-recruitifi-demo.2.rahtiapp.fi/api/companies
+# Recreate strategy restarts the Pod automatically; no extra restart is required.
+```
+
+The existing ImageStream must exist for pushing to the integrated registry. You
+can alternatively use the existing binary BuildConfig flow documented above;
+choose one build/publish method per release. To restore authentication later:
+`oc set env deployment/recruitifi TALENTMATCH_DEMO_AUTH_ENABLED=true`, with the
+existing nonblank password Secret retained. This rolls the Pod without removing data.
