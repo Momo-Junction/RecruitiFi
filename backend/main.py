@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from .demo_auth import DemoAuthMiddleware, hosted_password
 from .database import SCHEMA_PATH, connect
 from .matching_engine import LANGUAGE_LEVELS, SCORING_VERSION, calculate_match
 from .models import (
@@ -31,6 +32,7 @@ CANDIDATE_JSON_FIELDS = ("languages", "skills")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    hosted_password()
     with connect() as connection:
         connection.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
         connection.execute(
@@ -40,6 +42,8 @@ async def lifespan(app: FastAPI):
     yield
 
 
+# Validate hosted configuration before Uvicorn can accept requests, including direct launches.
+hosted_password()
 app = FastAPI(title="City of Espoo TalentMatch", lifespan=lifespan)
 app.include_router(profile_router)
 app.add_middleware(
@@ -54,6 +58,9 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type"],
 )
+
+# Outermost middleware protects static files, docs, downloads and every API method.
+app.add_middleware(DemoAuthMiddleware)
 
 
 def read_rows(query: str, *json_fields: str, params: tuple = ()):
