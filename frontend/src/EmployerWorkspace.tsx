@@ -178,12 +178,11 @@ export function CandidateSignal({ match, companyId, interested = false }: { matc
   )
 }
 
-export function EmployerWorkspace({ companies, skills, candidates, onCompanySaved, swipeStore }: {
-  companies: Company[]; skills: Skill[]; candidates: Candidate[]; onCompanySaved: (company: Company) => void
+export function EmployerWorkspace({ companyId, companies, skills, candidates, onCompanySaved, swipeStore }: {
+  companyId: number; companies: Company[]; skills: Skill[]; candidates: Candidate[]; onCompanySaved: (company: Company) => void
   swipeStore: SwipeStore
 }) {
   const [view, setView] = useState<'swipe' | 'queue'>('swipe')
-  const [companyId, setCompanyId] = useState(companies[0]?.id)
   const [editing, setEditing] = useState(false)
   const [showAll, setShowAll] = useState(false)
   const [attempt, setAttempt] = useState(0)
@@ -205,7 +204,7 @@ export function EmployerWorkspace({ companies, skills, candidates, onCompanySave
     return () => controller.abort()
   }, [company, attempt, candidates])
 
-  if (!company) return <p>No employers available.</p>
+  if (!company) return <p>Your demo company profile is unavailable. Log out and contact the demo operator.</p>
   const visibleMatches = current?.matches.filter((match) => showAll || (match.dealbreakers_passed && match.meets_threshold)) ?? []
   const decisions = swipeStore.swipes.filter((row) => row.company_id === company.id)
   const own = decisions.filter((row) => row.actor === 'employer')
@@ -223,14 +222,7 @@ export function EmployerWorkspace({ companies, skills, candidates, onCompanySave
       <div className="min-w-0">
         <section className={panel} aria-label="Employer role">
           <div className="mb-4 flex items-center justify-between gap-3"><h2 className="font-bold">Employer role</h2><NotificationBell key={company.id} recipient="employer" identityId={company.id} /></div>
-          <label className="grid gap-2 text-sm font-semibold">
-            Company
-            <select className={input} value={company.id} disabled={editing} onChange={(event) => {
-              setCompanyId(Number(event.target.value)); setEditing(false); setNotice('')
-            }}>
-              {companies.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
-            </select>
-          </label>
+          <p className="text-sm font-semibold">{company.name}</p>
           <p className="mt-3 text-sm text-slate-600">Booth {company.booth_number} · {company.industry}</p>
           <p className="mt-1 text-sm text-slate-600">{company.working_language} B2+ · {company.min_match_threshold}% threshold</p>
           {!editing && <button type="button" className={`mt-4 ${button}`} onClick={() => { setNotice(''); setEditing(true) }}>Quick Role Builder</button>}
