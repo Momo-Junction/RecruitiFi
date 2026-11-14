@@ -80,12 +80,18 @@ def repository_material(material):
 
 
 def public_profile_enabled():
-    return os.environ.get('TALENTMATCH_AI_FETCH_PUBLIC_PROFILES')=='1'
+    return os.environ.get('TALENTMATCH_AI_FETCH_PUBLIC_PROFILES','1')=='1'
 
 
 def partition_materials(materials):
     usable=[];skipped=[]
     for material in materials:
+        if material['category']=='linkedin':
+            try:public_profiles.linkedin_url(material['url'])
+            except ValueError:
+                skipped.append({'material_id':material['id'],'category':'linkedin','content_status':'not_analyzed','detail':'Use a valid HTTPS LinkedIn /in/profile URL for the profile-completion bonus.'})
+            else:skipped.append({'material_id':material['id'],'category':'linkedin','content_status':'profile_completion_bonus','bonus_points':2,'detail':'LinkedIn link supplied: +2 profile-completion points. Page not fetched; not AI-verified evidence.'})
+            continue
         profile=material['category']=='github' and not repository_material(material)
         if public_profile_enabled() and public_profiles.supported(material):
             usable.append(material);continue
@@ -119,7 +125,7 @@ def retrieve(materials):
     remaining=100000-sum(f.get('decoded_bytes',0) for r in results for f in r['files'])
     if public_profile_enabled():
         for material in materials:
-            if public_profiles.supported(material):
+            if material['category']=='github' and public_profiles.supported(material):
                 response=public_profiles.fetch_profile(material,budget=budget)
                 text=response['text'].encode('utf-8')[:max(0,remaining)].decode('utf-8',errors='ignore');remaining-=len(text.encode('utf-8'))
                 found[material['id']]={**response,'text':text,'public_profile':True}
@@ -178,11 +184,11 @@ def snapshot(connection,candidate_id):
         if row['category'] not in MATERIAL_CATEGORIES:raise ValueError('Unsupported evidence category.')
         materials.append(dict(row))
     openings=read_jobs(connection)
-    if len(openings)>32:raise ValueError('Demo budget supports at most 32 active jobs.')
+    if len(openings)>128:raise ValueError('Demo budget supports at most 128 active jobs.')
     names={r['id']:r['name'] for r in connection.execute('SELECT id,name FROM skills ORDER BY id')}
     claims=json.loads(connection.execute('SELECT skills FROM candidates WHERE id=?',(candidate_id,)).fetchone()[0])
     canonical=[{**m,'content':hashlib.sha256(m['content']).hexdigest() if m['content'] is not None else None} for m in materials]
-    payload={'evidence_version':'public-profiles-v4','fetch_public_profiles':public_profile_enabled(),'materials':canonical,'jobs':[j.model_dump() for j in openings],'catalog':names,'claims':claims,'version':job_relevance.VERSION,'revision':job_relevance.MODEL_REVISION}
+    payload={'evidence_version':'linkedin-completion-bonus-v5','fetch_public_profiles':public_profile_enabled(),'materials':canonical,'jobs':[j.model_dump() for j in openings],'catalog':names,'claims':claims,'version':job_relevance.VERSION,'revision':job_relevance.MODEL_REVISION}
     digest=hashlib.sha256(json.dumps(payload,sort_keys=True).encode()).hexdigest()
     return digest,materials,openings,names,claims
 
@@ -244,6 +250,12 @@ def compute(connection,candidate_id,*,retrieved=None):
         def embed(self,texts,**_):return [vectors[t] for t in texts]
     matches={str(job.id):job_relevance.score(candidate_id,requirements[job.id],fragments,claimed_skill_ids=[s['skill_id'] for s in claims],client=Cached())
              if requirements[job.id] else {'status':'not_analyzed','score':None,'requirements':[]} for job in openings}
+    bonus=2 if any(s['content_status']=='profile_completion_bonus' for s in skipped) else 0
+    for match in matches.values():
+        if match['status']=='completed' and match['score'] is not None:
+            match['profile_bonus']=bonus
+            match['display_score']=round(min(100,match['score']+bonus),1)
+            match['bonus_reason']='linkedin_link_supplied_not_verified' if bonus else None
     return {'fingerprint':fingerprint,'matches':matches,'status':'completed','coverage_limited':True,'sources':sources+skipped}
 
 
@@ -352,7 +364,7 @@ def trigger(candidate_id:int,request:Request):
         except (ValueError,TypeError):fail(403,'Evidence has not been explicitly approved for analysis.')
         try:validate_materials(materials)
         except ValueError as error:fail(422,str(error))
-    if identifier is None:fail(422,'These links contain no analyzable text. Add a profile description, select a public GitHub repository, or select a text-based PDF. No linked profiles were fetched.')
+    if identifier is None:fail(422,'Select a CV, project or GitHub evidence to analyze. A LinkedIn link supplies only a +2 profile-completion bonus; it is not AI evidence.')
     return start(candidate_id,identifier,request,Options())
 
 
