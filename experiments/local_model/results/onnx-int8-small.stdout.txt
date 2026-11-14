@@ -1,0 +1,4 @@
+onnx-int8: short batch=1 tokens=13 median=1.821 ms peak=114.4 MiB
+onnx-int8: short batch=3 tokens=13 median=4.930 ms peak=114.4 MiB
+onnx-int8: max_256_tokens batch=1 tokens=256 median=35.664 ms peak=118.4 MiB
+onnx-int8: max_256_tokens batch=3 tokens=256 median=106.913 ms peak=155.0 MiB
