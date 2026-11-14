@@ -10,13 +10,13 @@ after(() => server.close())
 const { TalentWorkspace } = await server.ssrLoadModule('/src/TalentWorkspace.tsx')
 const { profileRequest } = await server.ssrLoadModule('/src/api.ts')
 const props = {
-  candidates: [], companies: [], skills: [], onSaved() {},
+  candidateId: 402, candidates: [], companies: [], skills: [], onSaved() {},
   swipeStore: { swipes: [], ready: true, error: '', retry() {}, async decide() {}, async undo() {} },
 }
 
 test('empty API directory renders the existing empty state before a profile is loaded', () => {
   const html = renderToString(React.createElement(TalentWorkspace, props))
-  assert.match(html, /No candidate profiles available/)
+  assert.match(html, /demo candidate profile is unavailable/)
 })
 
 test('seeded directory renders loading state while saved profile request is pending', () => {
