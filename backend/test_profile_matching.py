@@ -181,7 +181,7 @@ class ConsentedProfileTests(ProfileMatchingTests):
     async def test_every_non_github_resource_category_reaches_analysis_and_storage(self):
         from .test_evidence import synthetic_pdf
         owner=await self.login('talent-001','fabricated-owner-test-password')
-        for category in ('cv','project','certificate','research','linkedin','website'):
+        for category in ('cv','project','certificate','research','website'):
             with self.subTest(category=category):
                 with database.connect() as c:
                     if category in ('linkedin','website'):
@@ -264,7 +264,8 @@ class ConsentedProfileTests(ProfileMatchingTests):
             await asyncio.to_thread(self.manager.future.result,5)
         data=(await self.request('GET',path,headers=owner))[1]
         self.assertEqual(data['status'],'completed',data)
-        self.assertEqual({s['material_id'] for s in data['sources'] if s['content_status']=='not_analyzed'},{linkedin,github})
+        self.assertEqual({s['material_id'] for s in data['sources'] if s['content_status']=='not_analyzed'},{github})
+        self.assertEqual(next(s for s in data['sources'] if s['material_id']==linkedin)['content_status'],'profile_completion_bonus')
         self.assertTrue(data['matches'])
 
     async def test_github_profile_descriptions_are_analyzed_without_fetching(self):
@@ -282,7 +283,7 @@ class ConsentedProfileTests(ProfileMatchingTests):
         self.assertEqual((await self.consent(owner))[0],200)
         status,error,_=await self.request('POST',self.path+'/analyze',headers=owner)
         self.assertEqual(status,422)
-        self.assertIn('no analyzable text',error['detail'])
+        self.assertIn('Select a CV',error['detail'])
 
     async def test_link_description_edits_require_owner_csrf_and_renewed_consent(self):
         owner=await self.login('talent-001','fabricated-owner-test-password')
@@ -301,7 +302,7 @@ class ConsentedProfileTests(ProfileMatchingTests):
         owner=await self.login('talent-001','fabricated-owner-test-password')
         flag=patch.dict('os.environ',TALENTMATCH_AI_FETCH_PUBLIC_PROFILES='1')
         with flag:
-            for category,url in (('github','https://github.com/SyntheticOwner'),('linkedin','https://www.linkedin.com/in/synthetic-only')):
+            for category,url in (('github','https://github.com/SyntheticOwner'),):
                 with self.subTest(category=category),database.connect() as c:
                     c.execute("UPDATE profile_materials SET category=?,url=?,description='' WHERE id=?",(category,url,self.material))
                 self.assertEqual((await self.consent(owner))[0],200)
@@ -322,7 +323,7 @@ class ConsentedProfileTests(ProfileMatchingTests):
         owner=await self.login('talent-001','fabricated-owner-test-password')
         with database.connect() as c:
             linkedin=c.execute("INSERT INTO profile_materials(candidate_id,category,title,description,url) VALUES(402,'linkedin','LinkedIn','','https://www.linkedin.com/in/synthetic-only')").lastrowid
-        with patch.dict('os.environ',TALENTMATCH_AI_FETCH_PUBLIC_PROFILES='1'),patch.object(public_profiles,'fetch_profile',return_value={'status':'profile_access_blocked','text':'','references':[],'untrusted':True}):
+        with patch.dict('os.environ',TALENTMATCH_AI_FETCH_PUBLIC_PROFILES='1'),patch.object(public_profiles,'fetch_profile',side_effect=AssertionError('LinkedIn must never be fetched')):
             self.assertEqual((await self.request('POST',self.path+'/consent',{'material_ids':[linkedin,self.material],'confirm':True},owner))[0],200)
             self.assertEqual((await self.request('POST',self.path+'/analyze',headers=owner))[0],202)
             await asyncio.to_thread(self.manager.future.result,5)
@@ -330,5 +331,46 @@ class ConsentedProfileTests(ProfileMatchingTests):
             self.assertEqual(data['status'],'completed',data)
             self.assertTrue(data['matches'])
             blocked=next(s for s in data['sources'] if s['material_id']==linkedin)
-            self.assertEqual(blocked['content_status'],'not_analyzed')
-            self.assertIn('blocked',blocked['detail'])
+            self.assertEqual(blocked['content_status'],'profile_completion_bonus')
+            self.assertEqual(blocked['bonus_points'],2)
+            for match in data['matches'].values():
+                self.assertEqual(match['profile_bonus'],2)
+                self.assertEqual(match['display_score'],min(100,match['score']+2))
+
+    async def test_linkedin_bonus_does_not_stack_or_invent_model_evidence(self):
+        from .evidence import public_profiles
+        owner=await self.login('talent-001','fabricated-owner-test-password')
+        with database.connect() as c:
+            links=[c.execute("INSERT INTO profile_materials(candidate_id,category,title,description,url) VALUES(402,'linkedin','LinkedIn','','https://www.linkedin.com/in/synthetic-only')").lastrowid for _ in range(2)]
+        self.assertEqual((await self.request('POST',self.path+'/consent',{'material_ids':[self.material,*links],'confirm':True},owner))[0],200)
+        with patch.object(public_profiles,'fetch_profile',side_effect=AssertionError('No scraping')):
+            self.assertEqual((await self.request('POST',self.path+'/analyze',headers=owner))[0],202)
+            await asyncio.to_thread(self.manager.future.result,5)
+        data=(await self.request('GET',self.path,headers=owner))[1]
+        self.assertEqual(data['matches']['501']['score'],100)
+        self.assertEqual(data['matches']['501']['display_score'],100)
+        self.assertEqual(data['matches']['502']['score'],0)
+        self.assertEqual(data['matches']['502']['display_score'],2)
+        self.assertTrue(all(m['profile_bonus']==2 for m in data['matches'].values()))
+        self.assertEqual((await self.request('POST',self.path+'/consent',{'material_ids':links,'confirm':True},owner))[0],200)
+        self.assertEqual((await self.request('POST',self.path+'/analyze',headers=owner))[0],422)
+
+    async def test_expanded_practice_jobs_share_embedding_budget(self):
+        owner=await self.login('talent-001','fabricated-owner-test-password')
+        with database.connect() as c:
+            for i in range(1000,1060):c.execute("INSERT INTO job_openings VALUES(?,1,'Synthetic practice job','it','Synthetic only','[{\"skill_id\":1,\"weight\":70}]','[]',1)",(i,))
+        self.assertEqual((await self.consent(owner))[0],200)
+        self.assertEqual((await self.request('POST',self.path+'/analyze',headers=owner))[0],202)
+        await asyncio.to_thread(self.manager.future.result,5)
+        data=(await self.request('GET',self.path,headers=owner))[1]
+        self.assertEqual(data['status'],'completed',data)
+        self.assertEqual(len(data['matches']),62)
+        self.assertLess(profile_matching.EmbeddingClient.return_value.embed.call_count,10)
+
+    def test_public_github_retrieval_defaults_on_with_explicit_operator_opt_out(self):
+        import os
+        with patch.dict('os.environ'):
+            os.environ.pop('TALENTMATCH_AI_FETCH_PUBLIC_PROFILES',None)
+            self.assertTrue(profile_matching.public_profile_enabled())
+            os.environ['TALENTMATCH_AI_FETCH_PUBLIC_PROFILES']='0'
+            self.assertFalse(profile_matching.public_profile_enabled())
