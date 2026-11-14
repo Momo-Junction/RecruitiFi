@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from .demo_auth import DemoAuthMiddleware, hosted_password
 from .database import SCHEMA_PATH, connect
@@ -336,4 +337,11 @@ def healthz():
 # Container builds supply these assets; local Vite development is unchanged.
 _frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 if (os.environ.get("TALENTMATCH_SERVE_FRONTEND") == "1" or os.environ.get("TALENTMATCH_HOSTED_DEMO") == "1") and (_frontend_dist / "index.html").is_file():
+    # Only the three declared client routes fall back to React, never API/asset 404s.
+    @app.get("/talent", include_in_schema=False)
+    @app.get("/employer", include_in_schema=False)
+    @app.get("/organizer", include_in_schema=False)
+    def demo_dashboard_entry():
+        return FileResponse(_frontend_dist / "index.html")
+
     app.mount("/", StaticFiles(directory=_frontend_dist, html=True), name="frontend")
