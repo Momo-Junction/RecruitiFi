@@ -253,14 +253,18 @@ export function TalentWorkspace({ candidates, companies, skills, onSaved, swipeS
         {rows.map(({ company, match }) => (
           <div key={company.id}>
             <button type="button" aria-expanded={openCompany === company.id} onClick={() => setOpenCompany(openCompany === company.id ? null : company.id)}
-              className={`flex w-full cursor-pointer items-center gap-3 border-b border-slate-100 px-4 py-4 text-left hover:bg-mist sm:gap-4 sm:px-6 ${openCompany === company.id ? 'bg-mist' : ''}`}>
+              className={`group flex w-full cursor-pointer items-center gap-3 border-b border-slate-100 px-4 py-4 text-left transition-colors hover:bg-mist focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-espoo motion-reduce:transition-none sm:gap-4 sm:px-6 ${openCompany === company.id ? 'bg-mist' : ''}`}>
               <span className="shrink-0 rounded-lg bg-mist px-2 py-2 text-xs font-bold text-espoo">{company.booth_number}</span>
               <span className="min-w-0 flex-1">
                 <span className="block font-semibold">{company.name}</span>
                 <span className="block text-xs leading-relaxed text-slate-600">{company.industry}</span>
               </span>
               <span className={`shrink-0 text-lg font-bold tabular-nums text-espoo ${busy ? 'opacity-50' : ''}`}>{match ? `${format.format(match.total_score)}%` : '—'}</span>
-              <span aria-hidden="true" className="text-espoo">{openCompany === company.id ? '−' : '+'}</span>
+              <span aria-hidden="true" className={`grid size-8 shrink-0 place-items-center rounded-full border text-espoo transition-colors group-hover:border-blue-200 group-hover:bg-blue-100 motion-reduce:transition-none ${openCompany === company.id ? 'border-blue-200 bg-blue-100' : 'border-blue-100 bg-white'}`}>
+                <svg viewBox="0 0 20 20" fill="none" className={`size-4 transition-transform motion-reduce:transition-none ${openCompany === company.id ? 'rotate-180' : ''}`}>
+                  <path d="m5 8 5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
             </button>
             {openCompany === company.id && match && (
               <MatchBreakdown key={candidate.id} match={match} busy={busy} onClose={() => setOpenCompany(null)} />
