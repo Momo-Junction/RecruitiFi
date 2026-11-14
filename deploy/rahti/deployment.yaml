@@ -15,6 +15,7 @@ spec:
     metadata:
       labels:
         app: recruitifi
+        recruitifi.ai-client: 'true'
     spec:
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: 40
@@ -42,6 +43,15 @@ spec:
                   key: TALENTMATCH_DEMO_PASSWORD
             - name: PORT
               value: '8080'
+            - name: TALENTMATCH_EMBED_URL
+              value: http://recruitifi-ai:8080/embed
+            - name: TALENTMATCH_EMBED_INTERNAL_HOST
+              value: recruitifi-ai
+            - name: TALENTMATCH_EMBED_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: recruitifi-ai-auth
+                  key: TALENTMATCH_EMBED_TOKEN
           resources:
             requests:
               cpu: 100m
