@@ -40,7 +40,7 @@ Talent profiles have dedicated sections for CVs, projects, certificates, researc
 
 CV and portfolio availability are derived from saved materials. Skills linked to projects, research or submitted certificates receive the corresponding scoring tier. A submitted certificate has a reviewable attachment or URL, and its authenticity requires human review. Legacy seeded skill claims are treated as listed skills until supporting material is attached.
 
-This local hackathon demo uses a persona selector and unauthenticated API routes. Real deployment requires authenticated candidate ownership and authorized document access before handling real personal documents.
+This hackathon demo uses individual password-free demo accounts with shared API access (see below). Real deployment requires authenticated candidate ownership and authorized document access before handling real personal documents.
 
 | Endpoint | Returns |
 | --- | --- |
@@ -89,7 +89,7 @@ Likes and passes persist in SQLite per demo candidate, company, and side. The Li
 - `PUT /api/swipes` upserts `{candidate_id, company_id, actor, decision}` (`actor`: `talent` or `employer`; `decision`: `like` or `pass`).
 - `DELETE /api/swipes/{actor}/{candidate_id}/{company_id}` undoes one side's decision.
 
-Restart the backend after upgrading; startup creates the swipe table without reseeding. Like the rest of this demo, these endpoints use shared personas without authentication. Talent profile edits remain temporary simulations; employer scores use saved seed profiles. Production use needs authenticated identity and access control. Decisions update across both views in the current page; reload to fetch changes from another browser.
+Restart the backend after upgrading; startup creates the swipe table without reseeding. These endpoints use the selected demo account's candidate/company IDs; this is not secure per-user authentication. Talent profile edits persist to that candidate; employer scores use saved profiles. Production use needs authenticated identity and access control. Decisions refresh immediately after a local action and poll every 12 seconds while a Talent or Employer dashboard is active.
 
 Run the isolated swipe API checks with `backend/.venv/bin/python -m unittest backend.test_swipes`.
 
@@ -125,28 +125,114 @@ thresholds. Organizer suggestions require skill/language/visa eligibility and th
 employer threshold, not likes or swipes. Add supporting synthetic materials and
 refresh suggestions; do not lower thresholds to manufacture introductions.
 
-## Demo role selection
+## Individual demo accounts and profile isolation
 
-The welcome page at `/` offers Talent, Employer and Espoo Organizer demo entries.
-Each choice opens the existing dashboard at `/talent`, `/employer` or `/organizer`.
-Only the selected dashboard mounts; its old cross-role tabs are replaced with a
-Switch Role button. Selection is stored in sessionStorage for that browser tab.
-Refresh and browser Back/Forward preserve the navigation rules; opening a different
-dashboard URL redirects to the selected role, or to `/` when no role is selected.
-Switch Role clears the selection. If browser storage is blocked, in-page selection
-still works but cannot survive a refresh.
+At `/`, select Talent, Employer or Espoo Organizer, select an account, then click
+**Enter Dashboard**. The existing `/talent`, `/employer` and `/organizer` dashboards
+are reused. The header identifies the account and offers **Logout / Switch Account**.
+The personal profile selectors are removed; discovery still includes all eight
+companies and the existing anonymous candidate rankings.
 
-These are frontend demo navigation choices, not secure role permissions or new
-accounts. The existing hosted authentication/public-mode configuration is unchanged.
-FastAPI serves the React entry point for only the three dashboard routes; missing
-API endpoints and missing assets still return 404. No dashboard, matching logic,
-SQLite schema, deployment resources or persistent data were changed for this flow.
+The single server mapping in `backend/demo_accounts.py` is identical locally and
+in the image. It looks up existing profiles without creating or updating records.
+`GET /api/demo/accounts` returns account names, availability and actual event counts.
+Missing profiles are explicitly unavailable, never replaced with another profile.
+An empty database does not trigger seeding through the account endpoint.
 
-Run `npm test` and `npm run build` in `frontend` for navigation/rendering regressions
-and TypeScript/production validation. The existing container checks additionally
-test deep links in hosted mode. Rebuild the image and update the existing Deployment
-using [the Rahti runbook](deploy/rahti/README.md#local-verification-and-later-safe-update).
-Keep the existing PVC; do not reseed the deployed event or recreate its storage.
+| Talent account | Candidate ID | Seeded display name |
+| --- | --- | --- |
+| talent-001 | 402 | Aino Lehtinen |
+| talent-002 | 406 | Samir Haddad |
+| talent-003 | 411 | Nhi Tran |
+| talent-004 | 417 | Oskari Niemi |
+| talent-005 | 423 | Fatima Okafor |
+| talent-006 | 429 | Linnea Holm |
+| talent-007 | 432 | Mateo Rojas |
+| talent-008 | 438 | Iryna Kovalenko |
+| talent-009 | 445 | Joonas Salmi |
+| talent-010 | 451 | Priya Menon |
+| talent-011 | 458 | Elina Mäkinen |
+| talent-012 | 463 | Min-jun Park |
+| talent-013 | 470 | Sara Lindström |
+| talent-014 | 476 | Lina Benali |
+| talent-015 | 483 | Noah Weber |
+
+| Employer account | Company ID | Seeded display name |
+| --- | --- | --- |
+| employer-001 | 1 | Kide Quantum Labs |
+| employer-002 | 2 | Kallio Grid Energy |
+| employer-003 | 3 | Siltava Health Systems |
+| employer-004 | 4 | Ranta Cloud Works |
+| employer-005 | 5 | Luoto Digital Studio |
+
+`organizer-001` is **Espoo Organizer Admin**, with no candidate/company identity.
+Companies 6–8 remain unchanged and discoverable, with no Employer login accounts.
+Account display names are read from the current matching database records.
+
+One shared session in `sessionStorage` under `recruitifi.demoAccount` stores the
+account ID, role and candidate/company ID. Refresh validates that identity against
+the server catalog before mounting a dashboard. Old role-only sessions require
+account selection once after upgrading. Browser back/forward resolves to the
+currently selected role; logout clears the account. Account changes unmount the
+whole dashboard, abort reads and discard profile, directory, swipe and notification
+state before the next account mounts. With browser storage disabled, selection
+works in memory until refresh; refresh persistence requires sessionStorage.
+
+Frontend API requests send `X-Recruitifi-Demo-Account` and bypass browser response caching with `cache: no-store`. Client checks reject a
+mismatched profile/company ID, and the server independently checks the canonical
+mapping before profile/document operations, company edits/meeting acceptance,
+swipes/undo, or notification access. Candidate listing with this header returns
+only the Talent's own profile, or no personal candidate records for other roles;
+swipe listing returns only the selected profile's pairs. Anonymous matching
+responses do not contain documents, email or full names. Matching calculations,
+thresholds, Organizer eligibility, and notification rules are unchanged.
+
+**These accounts are not secure authentication.** The account ID is caller-selected
+and can be changed. Existing shared API calls without the header remain supported,
+and direct document links do not carry it. Anyone with demo access can choose any
+account or use shared API routes, including writes and document downloads. These
+checks prevent accidental cross-account UI edits; they do not protect real personal
+data. Use synthetic information only. The existing optional hosted Basic gate is
+unchanged and, when enabled, still requires the shared password before accessing
+accounts, APIs and downloads. No passwords or tokens are added to the account map.
+
+There are **no database/schema migrations** for accounts. Do not rerun the seed
+script on an existing event: it updates seed records. No PVC, Secret, environment,
+Dockerfile, or Kubernetes resource changes are required.
+
+To test locally, use the existing backend environment and two terminals:
+
+```sh
+# For a new disposable local event ONLY, not an existing/PVC database:
+DEMO_DATA_DIR=$(mktemp -d "${TMPDIR:-/tmp}/recruitifi-demo.XXXXXX")
+export TALENTMATCH_DB="$DEMO_DATA_DIR/event.sqlite3"
+backend/.venv/bin/python -m backend.seed
+backend/.venv/bin/python -m uvicorn backend.main:app --reload
+# Other terminal:
+cd frontend
+pnpm dev
+```
+
+Open http://localhost:5173. Select `talent-001`, confirm Aino's profile without a
+persona dropdown, edit a skill/upload a synthetic document and refresh. Log out;
+select `talent-002` and verify its own editor and empty/separate inbox. Test
+`employer-001`, then `employer-002`, confirming the company is fixed in each editor.
+Talent likes produce only the corresponding Employer Interested badge; Employer
+likes notify that Talent; both likes notify only the pair. Use another tab to test
+polling. Select `organizer-001` to verify the existing planner. Check direct URLs,
+back/forward and logout. Local tests use disposable SQLite files only.
+
+Validation commands:
+
+```sh
+backend/.venv/bin/python -m unittest discover -s backend -t . -p 'test_*.py' -v
+(cd frontend && npm test && npm run build)
+docker buildx build --platform linux/amd64 --load -t recruitifi:demo-accounts .
+python3 -B deploy/rahti/test_container.py recruitifi:demo-accounts
+```
+
+Rebuild/rollout instructions preserving the existing SQLite data are in
+[deploy/rahti/README.md](deploy/rahti/README.md#installing-individual-demo-accounts).
 
 ## Interest indicators and notifications
 
@@ -157,12 +243,12 @@ When both current likes exist, each side receives **It's a Match!**; the earlier
 Talent interest alert is superseded. Compatibility scores and Organizer eligibility
 are unchanged: a mutual like is interest, not automatic meeting eligibility.
 
-The bell belongs to the selected candidate persona or company, not just the demo
+The bell belongs to the logged-in demo candidate or company, not just the demo
 role. It shows active notifications, timestamps and unread counts, with individual
 Mark read controls. Active dashboards poll every 12 seconds and refresh immediately
 after local swipes, undo or read actions. Switching identities remounts the inbox;
 old requests are aborted. These frontend demo identities do not provide secure
-per-user authorization. Everyone with shared demo access can select other personas;
+per-user authorization. Everyone with shared demo access can select another account after logout;
 use synthetic information only.
 
 Startup adds the `notifications` table and indexes using repeatable CREATE IF NOT
