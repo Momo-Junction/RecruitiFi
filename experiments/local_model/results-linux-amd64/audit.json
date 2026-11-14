@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "cases": 8,
+  "non_root": true,
+  "quotas_verified": true,
+  "avx2_exposed": true,
+  "offline_probe_verified": true,
+  "no_oom_or_memory_limit_hits": true,
+  "cpu_provider_one_thread": true,
+  "similarity_sanity": true,
+  "native_amd64_tested": false,
+  "combined_fastapi_tested": false
+}
