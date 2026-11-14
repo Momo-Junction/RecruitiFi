@@ -14,6 +14,7 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT))
 STATE = Path(tempfile.gettempdir()) / ('recruitifi-local-ai-' + hashlib.sha256(str(ROOT).encode()).hexdigest()[:12])
 TALENT_IDS = (402,406,411,417,423,429,432,438,445,451,458,463,470,476,483,900001)
 
@@ -42,7 +43,15 @@ def configuration():
     if path.is_symlink() or path.stat().st_uid != os.getuid():
         raise RuntimeError('Local server configuration is not owned by this user.')
     path.chmod(0o600)
+    # Expand the private local account map without rotating existing passwords.
     env = json.loads(path.read_text())
+    accounts=json.loads(env['TALENTMATCH_AI_DEMO_ACCOUNTS'])
+    from backend.demo_accounts import BY_ID
+    for alias in BY_ID:accounts.setdefault(alias,secrets.token_urlsafe(24))
+    env['TALENTMATCH_AI_DEMO_ACCOUNTS']=json.dumps(accounts)
+    temporary=STATE/'server-config.next.json'
+    with open(temporary,'w',opener=lambda p,f:os.open(p,f,0o600)) as output:json.dump(env,output)
+    temporary.replace(path)
     # Recreate the private presenter list from the server-side configuration.
     credentials = STATE / 'account-passwords.txt'
     if credentials.is_symlink():raise RuntimeError('Unsafe credential file.')
