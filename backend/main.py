@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from .demo_accounts import guard_demo_identity, request_account, router as demo_accounts_router
 from .demo_auth import DemoAuthMiddleware, hosted_password
 from .database import SCHEMA_PATH, connect
+from .hiring_tasks import router as hiring_router
 from .matching_engine import LANGUAGE_LEVELS, SCORING_VERSION, calculate_match
 from .models import (
     Candidate,
@@ -76,6 +77,7 @@ app.include_router(evidence_sessions_router)
 app.include_router(employer_evidence_router)
 app.include_router(public_evidence_router)
 app.include_router(profile_matching_router)
+app.include_router(hiring_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -147,6 +149,12 @@ def list_swipes(request: Request):
 def save_swipe(swipe: SwipeDecision):
     with connect() as connection:
         connection.execute("BEGIN IMMEDIATE")
+        if swipe.actor == 'employer' and swipe.decision == 'pass':
+            if connection.execute(
+                "SELECT 1 FROM hiring_tasks WHERE candidate_id = ? AND company_id = ? LIMIT 1",
+                (swipe.candidate_id, swipe.company_id),
+            ).fetchone():
+                raise HTTPException(409, "This candidate has assigned tasks. Their shortlist decision is locked.")
         if not connection.execute('SELECT 1 FROM candidates WHERE id = ?', (swipe.candidate_id,)).fetchone():
             raise HTTPException(status_code=404, detail='Candidate not found.')
         if not connection.execute('SELECT 1 FROM companies WHERE id = ?', (swipe.company_id,)).fetchone():
@@ -363,6 +371,12 @@ def list_audit_calculations(
 def undo_swipe(actor: Literal['talent', 'employer'], candidate_id: PositiveId, company_id: PositiveId):
     with connect() as connection:
         connection.execute("BEGIN IMMEDIATE")
+        if actor == 'employer':
+            if connection.execute(
+                "SELECT 1 FROM hiring_tasks WHERE candidate_id = ? AND company_id = ? LIMIT 1",
+                (candidate_id, company_id),
+            ).fetchone():
+                raise HTTPException(409, "This candidate has assigned tasks. Their shortlist decision is locked.")
         connection.execute(
             'DELETE FROM swipe_decisions WHERE actor = ? AND candidate_id = ? AND company_id = ?',
             (actor, candidate_id, company_id),

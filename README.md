@@ -1,6 +1,6 @@
 # City of Espoo TalentMatch
 
-A demo event directory with a FastAPI and SQLite backend and a React, TypeScript, Vite, and Tailwind CSS frontend. The seed data includes 40 skills, 8 fictional Espoo employers, and 15 synthetic candidates.
+A demo event directory with a FastAPI and SQLite backend and a React, TypeScript, Vite, and Tailwind CSS frontend. The seed data includes 40 skills, 8 fictional Espoo employers, and 15 synthetic candidates. For a larger practice directory, run `python -m backend.seed --include-practice` from the repository root. This adds missing practice records while preserving existing profiles.
 
 ## Run locally
 

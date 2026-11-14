@@ -57,6 +57,35 @@ class SwipeApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.request('DELETE', '/api/swipes/talent/402/1'))[0], 200)
         self.assertEqual((await self.request('GET'))[1], [employer])
 
+    async def test_shortlisted_candidate_can_submit_and_employer_can_verify(self):
+        path = '/api/hiring-tasks'
+        assignment = dict(candidate_id=402, company_id=1, title='Portfolio review', description='Share a project link.')
+        employer = {**self.vote, 'actor': 'employer'}
+
+        self.assertEqual((await self.request('POST', path, assignment))[0], 409)
+        self.assertEqual((await self.request('PUT', value=employer))[0], 200)
+        self.assertEqual((await self.request('POST', path, {**assignment, 'title': '   '}))[0], 422)
+        status, task = await self.request('POST', path, assignment)
+        self.assertEqual(status, 201)
+        self.assertIsNone(task['submission_url'])
+        self.assertEqual((await self.request('DELETE', '/api/swipes/employer/402/1'))[0], 409)
+        self.assertEqual((await self.request('PUT', value={**employer, 'decision': 'pass'}))[0], 409)
+
+        task_path = f"{path}/{task['id']}"
+        submission = {'url': 'https://example.com/project'}
+        self.assertEqual((await self.request('PUT', f'{task_path}/submission/406', submission))[0], 409)
+        self.assertEqual((await self.request('PUT', f'{task_path}/submission/402', {'url': 'ftp://example.com/work'}))[0], 422)
+        status, submitted = await self.request('PUT', f'{task_path}/submission/402', submission)
+        self.assertEqual(status, 200)
+        self.assertEqual(submitted['submission_url'], submission['url'])
+        self.assertEqual((await self.request('PUT', f'{task_path}/verification/2', submission))[0], 409)
+        self.assertEqual((await self.request('PUT', f'{task_path}/verification/1', {'url': 'https://example.com/old'}))[0], 409)
+        status, verified = await self.request('PUT', f'{task_path}/verification/1', submission)
+        self.assertEqual(status, 200)
+        self.assertTrue(verified['verified'])
+        self.assertEqual((await self.request('PUT', f'{task_path}/submission/402', submission))[0], 409)
+        self.assertEqual(await self.request('GET', path), (200, [verified]))
+
     async def test_saved_profile_routes_load_and_persist_materials(self):
         _, candidates = await self.request('GET', '/api/candidates')
         for candidate in candidates:

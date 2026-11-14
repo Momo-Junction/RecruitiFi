@@ -3,6 +3,7 @@ import { useAiMatches, aiLabel, AiExplanation } from './useAiMatches'
 import { filterJobs, IndustryFilters, JobEmptyState, JobRequirements, jobCompanyId, useIndustryFilters } from './Jobs'
 import { NotificationBell } from './NotificationBell'
 import { SwipeDeck, type DiscoveryCard } from './SwipeDeck'
+import { CandidateUpdates } from './HiringTasks'
 import type { SwipeStore } from './useSwipes'
 import { useEffect, useState } from 'react'
 import { ProfileMaterials } from './ProfileMaterials'
@@ -65,7 +66,7 @@ export function TalentWorkspace({ candidateId, candidates, companies, skills, on
   const [analysisConsent,setAnalysisConsent]=useState(false)
   const [shareAnalysis,setShareAnalysis]=useState(false)
   useEffect(() => {setAnalysisMaterials([]);setAnalysisConsent(false);setShareAnalysis(false)},[candidateId])
-  const [view, setView] = useState<'swipe' | 'list'>('swipe')
+  const [view, setView] = useState<'swipe' | 'list' | 'updates'>('swipe')
   const [savedProfile, setSavedProfile] = useState<SavedProfile>()
   const ai = useAiMatches([candidateId], analysisRevision(savedProfile))
   useEffect(() => {
@@ -187,7 +188,7 @@ export function TalentWorkspace({ candidateId, candidates, companies, skills, on
             <option value="">Select a skill</option>
             {availableSkills.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
           </select>
-          <button type="submit" className={primary} disabled={!skillToAdd || profileBusy}>Add skill</button>
+          <button type="submit" className={primary + ' min-h-11 shrink-0'} disabled={!skillToAdd || profileBusy}>Add skill</button>
         </form>
         <ul className="mt-3 divide-y divide-slate-100">
           {profile.skills.map(({ skill_id, evidence_tier }) => {
@@ -210,15 +211,20 @@ export function TalentWorkspace({ candidateId, candidates, companies, skills, on
         <div className="talent-view-toggle" aria-label="Job discovery mode">
           <button type="button" aria-pressed={view === 'swipe'} onClick={() => setView('swipe')}>✦ Swipe & connect</button>
           <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}>All jobs</button>
+          <button type="button" aria-pressed={view === 'updates'} onClick={() => setView('updates')}>
+            Hiring updates ({swipeStore.swipes.filter((row) => row.actor === 'employer' && row.candidate_id === candidate.id).length
+              + swipeStore.tasks.filter((task) => task.candidate_id === candidate.id && !task.submission_url).length})
+          </button>
         </div>
         {!jobDirectory && !jobError && <p role="status">Loading job openings…</p>}
         {jobDirectory && !visibleJobs.length && !jobError && <JobEmptyState hasJobs={jobs.length > 0} />}
-        {view === 'swipe' && <SwipeDeck key={candidate.id} cards={discoveryCards} loading={busy || !jobDirectory || !swipeStore.ready} error={jobError || swipeStore.error || (current?.failed ? 'Could not calculate your matches.' : '')}
+        {view === 'swipe' && <SwipeDeck side="talent" key={candidate.id} cards={discoveryCards} loading={busy || !jobDirectory || !swipeStore.ready} error={jobError || swipeStore.error || (current?.failed ? 'Could not calculate your matches.' : '')}
           onRetry={() => { swipeStore.retry(); setAttempt((value) => value + 1) }}
           onUndo={(jobId) => swipeStore.undo({ candidate_id: candidate.id, company_id: jobCompanyId(jobs, jobId), actor: 'talent' })}
           onDecide={(jobId, decision) => swipeStore.decide({ candidate_id: candidate.id, company_id: jobCompanyId(jobs, jobId), actor: 'talent', decision })}
           saved={own.filter((row) => row.decision === 'like').map((row) => ({ id: row.company_id, name: companyById.get(row.company_id)?.name ?? 'Employer', mutual: likedBy.has(row.company_id), reviewId: jobs.find((job) => job.company_id === row.company_id)?.id }))}
           onReview={(id) => { setOpenJob(jobs.some((job) => job.id === id) ? id : null); if (!visibleJobs.some((job) => job.id === id)) filters.update([]); setView('list') }} />}
+        {view === 'updates' && <CandidateUpdates key={candidate.id} candidateId={candidate.id} companies={companies} store={swipeStore} />}
       <section hidden={view !== 'list'} aria-labelledby="matches-heading" className={`${panel} min-w-0 overflow-hidden`}>
         <div className="border-b border-slate-200 p-5 sm:p-6">
           <h2 id="matches-heading" className="text-xl font-bold tracking-tight">Live job matches</h2>
@@ -233,14 +239,18 @@ export function TalentWorkspace({ candidateId, candidates, companies, skills, on
         {rows.map(({ job, company, match }) => (
           <div key={job.id}>
             <button type="button" aria-expanded={openJob === job.id} onClick={() => setOpenJob(openJob === job.id ? null : job.id)}
-              className={`flex w-full cursor-pointer items-center gap-3 border-b border-slate-100 px-4 py-4 text-left hover:bg-mist sm:gap-4 sm:px-6 ${openJob === job.id ? 'bg-mist' : ''}`}>
+              className={`group flex w-full cursor-pointer items-center gap-3 border-b border-slate-100 px-4 py-4 text-left transition-colors hover:bg-mist focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-espoo motion-reduce:transition-none sm:gap-4 sm:px-6 ${openJob === job.id ? 'bg-mist' : ''}`}>
               <span className="shrink-0 rounded-lg bg-mist px-2 py-2 text-xs font-bold text-espoo">{company?.booth_number ?? '—'}</span>
               <span className="min-w-0 flex-1">
                 <span className="block font-semibold">{job.title}</span>
                 <span className="block text-xs leading-relaxed text-slate-600">{job.company_name} · {job.industry_label}</span>
               </span>
               <span className={`shrink-0 text-lg font-bold tabular-nums text-espoo ${busy ? 'opacity-50' : ''}`}>{aiLabel(match?.ai)}</span>
-              <span aria-hidden="true" className="text-espoo">{openJob === job.id ? '−' : '+'}</span>
+              <span aria-hidden="true" className={`grid size-8 shrink-0 place-items-center rounded-full border text-espoo transition-colors group-hover:border-blue-200 group-hover:bg-blue-100 motion-reduce:transition-none ${openJob === job.id ? 'border-blue-200 bg-blue-100' : 'border-blue-100 bg-white'}`}>
+                <svg viewBox="0 0 20 20" fill="none" className={`size-4 transition-transform motion-reduce:transition-none ${openJob === job.id ? 'rotate-180' : ''}`}>
+                  <path d="m5 8 5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
             </button>
             {openJob === job.id && match && (
               <div><div className="px-5"><JobRequirements job={job} skills={skills} /></div><MatchBreakdown key={job.id} match={match} busy={busy} onClose={() => setOpenJob(null)} /></div>

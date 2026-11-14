@@ -187,3 +187,14 @@ CREATE TABLE IF NOT EXISTS ai_material_consents (
     share_company_id INTEGER REFERENCES companies(id),
     consented_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
+
+CREATE TABLE IF NOT EXISTS hiring_tasks (
+    id INTEGER PRIMARY KEY,
+    company_id INTEGER NOT NULL REFERENCES companies(id),
+    candidate_id INTEGER NOT NULL REFERENCES candidates(id),
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    submission_url TEXT,
+    verified INTEGER NOT NULL DEFAULT 0 CHECK (verified IN (0, 1)),
+    CHECK (verified = 0 OR submission_url IS NOT NULL)
+);

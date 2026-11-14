@@ -4,6 +4,7 @@ import { EmployerEvidence } from './EmployerEvidence'
 import { interestedCandidates } from './useSwipes'
 import { NotificationBell } from './NotificationBell'
 import { SwipeDeck, type DiscoveryCard } from './SwipeDeck'
+import { EmployerTasks } from './HiringTasks'
 import type { SwipeStore } from './useSwipes'
 import { useEffect, useState } from 'react'
 import {
@@ -188,7 +189,7 @@ export function EmployerWorkspace({ companyId, companies, skills, candidates, on
   companyId: number; companies: Company[]; skills: Skill[]; candidates: Candidate[]; onCompanySaved: (company: Company) => void
   swipeStore: SwipeStore
 }) {
-  const [view, setView] = useState<'swipe' | 'queue'>('swipe')
+  const [view, setView] = useState<'swipe' | 'queue' | 'shortlist'>('swipe')
   const [editing, setEditing] = useState(false)
   const [showAll, setShowAll] = useState(false)
   const [attempt, setAttempt] = useState(0)
@@ -230,6 +231,7 @@ export function EmployerWorkspace({ companyId, companies, skills, candidates, on
   const visibleMatches = aiMatches?.filter((match) => showAll || match.ai.score === null || (match.dealbreakers_passed && match.ai.score >= (job?.min_match_threshold ?? company.min_match_threshold))) ?? []
   const decisions = swipeStore.swipes.filter((row) => row.company_id === company.id)
   const own = decisions.filter((row) => row.actor === 'employer')
+  const shortlisted = own.filter((row) => row.decision === 'like')
   const likedBy = interestedCandidates(swipeStore.swipes, company.id)
   const cards: DiscoveryCard[] = (aiMatches ?? []).filter((match) => !own.some((row) => row.candidate_id === match.candidate_id)).map((match) => ({
     id: match.candidate_id, name: match.anonymous_code, subtitle: job ? `${job.title} · ${company.name}` : 'Talent in Espoo · identity stays private',
@@ -270,15 +272,28 @@ export function EmployerWorkspace({ companyId, companies, skills, candidates, on
       </div>
       <div className="order-first min-w-0 lg:order-none">
         <div className="talent-view-toggle" aria-label="Talent discovery mode">
-          <button type="button" aria-pressed={view === 'swipe'} onClick={() => setView('swipe')}>✦ Discover talent</button>
+          <button type="button" aria-pressed={view === 'swipe'} onClick={() => setView('swipe')}>Discover talent</button>
           <button type="button" aria-pressed={view === 'queue'} onClick={() => { setView('queue') }}>Eligible queue</button>
+          <button type="button" aria-pressed={view === 'shortlist'} onClick={() => setView('shortlist')}>Shortlisted ({shortlisted.length})</button>
         </div>
-        {view === 'swipe' && <SwipeDeck key={`${company.id}:${job?.id ?? 'company'}`} cards={cards} loading={!current || !swipeStore.ready} error={jobsError || swipeStore.error || (current?.failed ? 'Could not load candidate scores.' : '')}
+        {view === 'swipe' && <SwipeDeck side="employer" key={`${company.id}:${job?.id ?? 'company'}`} cards={cards} loading={!current || !swipeStore.ready} error={jobsError || swipeStore.error || (current?.failed ? 'Could not load candidate scores.' : '')}
           onRetry={() => { swipeStore.retry(); setAttempt((value) => value + 1) }}
           onUndo={(candidate_id) => swipeStore.undo({ candidate_id, company_id: company.id, actor: 'employer' })}
           onDecide={(candidate_id, decision) => swipeStore.decide({ candidate_id, company_id: company.id, actor: 'employer', decision })}
           saved={own.filter((row) => row.decision === 'like').map((row) => ({ id: row.candidate_id, name: current?.matches.find((match) => match.candidate_id === row.candidate_id)?.anonymous_code ?? 'Talent', mutual: likedBy.has(row.candidate_id), interested: likedBy.has(row.candidate_id) }))}
           onReview={() => { setShowAll(true); setView('queue') }} />}
+        {view === 'shortlist' && <section className={panel} aria-labelledby="shortlist-heading">
+          <h2 id="shortlist-heading" className="text-xl font-bold">Shortlisted candidates</h2>
+          {swipeStore.error ? <p role="alert" className="mt-3 text-sm">{swipeStore.error} <button type="button" className={link} onClick={swipeStore.retry}>Retry</button></p> :
+            !swipeStore.ready ? <p role="status" className="mt-3 text-sm">Loading shortlist…</p> :
+            shortlisted.length === 0 ? <p className="mt-3 text-sm">Shortlist a candidate from Discover talent to see them here.</p> :
+            <div className="mt-4 space-y-4">
+              {shortlisted.map(({ candidate_id }) => <EmployerTasks key={company.id + '-' + candidate_id}
+                name={candidates.find(({ id }) => candidate_id === id)?.anonymous_code ?? 'Candidate'}
+                score={current?.matches.find((match) => match.candidate_id === candidate_id)?.total_score}
+                mutual={likedBy.has(candidate_id)} candidateId={candidate_id} companyId={company.id} store={swipeStore} />)}
+            </div>}
+        </section>}
       <section hidden={view !== 'queue'} className={`${panel} min-w-0`} aria-labelledby="queue-heading">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="queue-heading" className="text-xl font-bold tracking-tight">People to meet</h2>

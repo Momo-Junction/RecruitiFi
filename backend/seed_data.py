@@ -102,3 +102,79 @@ CANDIDATES = [
     (483, "Noah Weber", True, True, {"German": "C2", "English": "C1", "Finnish": "B1"}, False,
      {"certificate": ["Energy Modeling"], "portfolio": ["Life Cycle Assessment", "Data Analysis", "Data Visualization"], "self_declared": ["Power Systems Engineering"]}),
 ]
+
+# The practice directory uses reserved IDs so existing profiles and decisions keep their links.
+PRACTICE_ROLES = (
+    ("Web Software", ("TypeScript", "React", "FastAPI"), ("SQL", "Automated Testing")),
+    ("Cloud Operations", ("Docker", "Cloud Infrastructure", "CI/CD"), ("Kubernetes", "Git")),
+    ("Data Analytics", ("SQL", "Data Analysis", "Data Visualization"), ("Python", "Statistical Analysis")),
+    ("Applied AI", ("Python", "Machine Learning", "Statistical Analysis"), ("SQL", "Data Privacy")),
+    ("Product Design", ("UI/UX Design", "User Research", "Figma Prototyping"), ("Web Accessibility", "TypeScript")),
+    ("Industrial Electronics", ("Embedded Systems", "C++", "Electronics Prototyping"), ("Digital Signal Processing", "Git")),
+    ("Quantum Research", ("Quantum circuit programming with Qiskit", "Python", "Digital Signal Processing"), ("C++", "Technical Documentation")),
+    ("Grid Technology", ("Power Systems Engineering", "Energy Modeling", "Data Analysis"), ("Python", "Data Visualization")),
+    ("Circular Economy", ("Life Cycle Assessment", "Sustainability Reporting", "Stakeholder Management"), ("Project Management", "Energy Modeling")),
+    ("Health Informatics", ("Clinical Data Management", "Medical Device Quality Management", "Data Privacy"), ("SQL", "Technical Documentation")),
+    ("Cybersecurity", ("Cybersecurity Risk Assessment", "Network Security", "Data Privacy"), ("Cloud Infrastructure", "Technical Documentation")),
+    ("Business Delivery", ("Project Management", "Agile Delivery", "Stakeholder Management"), ("Technical Documentation", "Data Analysis")),
+)
+
+# Full overlap with listed skills scores 63 points before uploaded evidence.
+EMPLOYER_LOCATIONS = (
+    ("Asterbridge", "Otaniemi", "English", True, 60),
+    ("Northfen", "Keilaniemi", "English", False, 62),
+    ("Birchspan", "Leppävaara", "Finnish", False, 62),
+    ("Westmere", "Tapiola", "Swedish", True, 60),
+)
+
+FIRST_NAMES = (
+    "Aada", "Arman", "Bea", "Daniel", "Elias", "Hana", "Iida", "Jonas", "Kaisa", "Luca",
+    "Maya", "Nadia", "Oliver", "Ravi", "Silvia", "Teo", "Uma", "Valeria", "Yusuf", "Zoe",
+)
+LAST_NAMES = (
+    "Keto", "Nyberg", "Martin", "Hassan", "Costa", "Tan", "Rossi", "Sharma",
+    "Korhonen", "Engström", "Novak", "Adeyemi",
+)
+
+
+def practice_companies():
+    for role_index, (industry, required, preferred) in enumerate(PRACTICE_ROLES):
+        for variant, (prefix, district, language, relocation, threshold) in enumerate(EMPLOYER_LOCATIONS):
+            offset = role_index * len(EMPLOYER_LOCATIONS) + variant
+            weights = (30, 25, 15)
+            rotated_weights = {skill: weights[(index + variant) % 3] for index, skill in enumerate(required)}
+            yield (
+                100 + offset, f"{prefix} {industry}", f"{industry} · {district}", f"P{offset + 1:02}",
+                relocation, language, threshold, rotated_weights, dict(zip(preferred, (12, 8))),
+            )
+
+
+def practice_candidates():
+    from random import Random
+
+    skill_names = [name for name, category in SKILLS if category != "Languages"]
+    for role_index, (_, required, preferred) in enumerate(PRACTICE_ROLES):
+        for variant, first_name in enumerate(FIRST_NAMES):
+            code = 1000 + role_index * len(FIRST_NAMES) + variant
+            rng = Random(code)
+            levels = (
+                {"English": "C1", "Finnish": "B1"},
+                {"English": "B2", "Finnish": "C1"},
+                {"English": "C1", "Finnish": "A2"},
+                {"English": "B2", "Swedish": "C1", "Finnish": "B1"},
+                {"English": "B1", "Finnish": "B2", "Swedish": "B1"},
+            )
+            languages = levels[variant % len(levels)]
+            core = list(required + preferred)
+            selected = core if variant % 4 == 0 else rng.sample(core, rng.randint(2, 5))
+            adjacent = rng.sample([name for name in skill_names if name not in core], rng.randint(1, 3))
+            evidence = {"certificate": [], "portfolio": [], "self_declared": []}
+            for skill in selected:
+                tier = "certificate" if variant % 4 == 0 else rng.choice(tuple(evidence))
+                evidence[tier].append(skill)
+            evidence["self_declared"].extend(adjacent)
+            yield (
+                code, f"{first_name} {LAST_NAMES[role_index]}", variant % 5 != 4,
+                bool(evidence["portfolio"]) or variant % 4 == 0, languages,
+                variant % 5 == 2, evidence,
+            )
