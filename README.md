@@ -77,13 +77,15 @@ The seed script creates `backend/talentmatch.sqlite3`. Rerunning it updates the 
 
 The `esco_uri` values are local identifiers for the demo. Candidate emails use `example.com`. The UI displays candidate codes while the demo API returns the full synthetic records.
 
-Set `TALENTMATCH_DB` to use a different database file. The default CORS origins are `http://localhost:5173` and `http://127.0.0.1:5173`. Set `TALENTMATCH_CORS_ORIGINS` to a comma-separated list for other origins. Set `VITE_API_URL` in `frontend/.env` to point the frontend to a different API base URL.
+Set `TALENTMATCH_DB` to use a different database file. The default CORS origins are `http://localhost:5180` and `http://127.0.0.1:5180`. Set `TALENTMATCH_CORS_ORIGINS` to a comma-separated list for other origins. Set `VITE_API_URL` in `frontend/.env` to point the frontend to a different API base URL.
 
 ## Swipe discovery
 
 Talent and Employer views open with a swipe deck ranked by the existing matching engine (dealbreakers first, then score). Drag a card right to like or left to pass, use the action buttons, or focus a card and press the arrow keys. Shared skills are highlighted; missing skills and meeting blockers stay visible. Profile edits recalculate Talent recommendations. On mobile, discovery appears before the profile editor.
 
 Likes and passes persist in SQLite per demo candidate, company, and side. The Likes tab distinguishes pending interest from mutual likes. Undo restores the last swiped card. A mutual like records interest; meeting acceptance still follows the existing eligibility checks. Employer cards keep candidate identities anonymous.
+
+Identity is shared only with consent. An employer's meeting request (`POST /api/companies/{company_id}/matches/{anonymous_code}/accept`) records the employer's like and returns `revealed: false` with no name or email. Only when the candidate has also liked that company does it return `revealed: true` with the candidate's name and email. On the Talent side, "I'd like to meet" in an employer's match breakdown saves that like.
 
 - `GET /api/swipes` reads saved demo decisions.
 - `PUT /api/swipes` upserts `{candidate_id, company_id, actor, decision}` (`actor`: `talent` or `employer`; `decision`: `like` or `pass`).
@@ -119,8 +121,14 @@ Public access also permits shared data changes and document access: synthetic da
 only. See [the hackathon runbook](deploy/rahti/README.md#optional-password-free-hackathon-mode)
 for safe update commands and a legitimate Organizer demonstration.
 
-A freshly seeded event has no saved proof materials, so legacy skills receive
-self-declared evidence and no CV/portfolio points. Scores remain below the seeded
-thresholds. Organizer suggestions require skill/language/visa eligibility and the
-employer threshold, not likes or swipes. Add supporting synthetic materials and
-refresh suggestions; do not lower thresholds to manufacture introductions.
+The seed attaches clearly labelled synthetic proof to each persona: a one-page PDF
+CV and `https://example.com/talentmatch-demo/` project and certificate links that
+match the evidence in `backend/seed_data.py`. A freshly seeded event therefore opens
+with evidence-backed introductions at seven of the eight booths. Kuura Software has
+none because its strongest candidate needs visa sponsorship, which shows the
+"booths that may need help" view and the employer's human-review override.
+Reseeding replaces only these synthetic materials and keeps anything users added.
+Organizer suggestions require skill/language/visa eligibility and the employer
+threshold, not likes or swipes. Deleting a persona's proof drops the same skills
+back to listed-skill evidence and below the threshold; do not lower thresholds to
+manufacture introductions.

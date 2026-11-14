@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from .main import app
-from .seed import seed
+from .seed import DEMO_NOTE, seed
 
 
 class SwipeApiTests(unittest.IsolatedAsyncioTestCase):
@@ -63,13 +63,14 @@ class SwipeApiTests(unittest.IsolatedAsyncioTestCase):
             status, saved = await self.request('GET', f"/api/candidates/{candidate['id']}/profile")
             self.assertEqual(status, 200)
             self.assertEqual(saved['candidate']['id'], candidate['id'])
-            self.assertEqual(saved['materials'], [])
+            self.assertTrue(all(item['description'] == DEMO_NOTE for item in saved['materials']))
+        _, before = await self.request('GET', '/api/candidates/402/profile')
         status, saved = await self.request('POST', '/api/candidates/402/links', {
             'category': 'project', 'title': 'Portfolio', 'url': 'https://example.com/portfolio', 'skill_id': 1,
         })
         self.assertEqual(status, 200)
         self.assertTrue(saved['candidate']['has_portfolio'])
-        self.assertEqual(len(saved['materials']), 1)
+        self.assertEqual(len(saved['materials']), len(before['materials']) + 1)
         self.assertEqual(await self.request('GET', '/api/candidates/402/profile'), (200, saved))
         self.assertEqual((await self.request('GET', '/api/candidates/99999/profile'))[0], 404)
 
@@ -78,6 +79,17 @@ class SwipeApiTests(unittest.IsolatedAsyncioTestCase):
         with redirect_stdout(io.StringIO()):
             seed()
         self.assertEqual(await self.request('GET'), (200, [self.vote]))
+
+    async def test_reseeding_replaces_demo_materials_and_keeps_uploads(self):
+        _, before = await self.request('GET', '/api/candidates/402/profile')
+        await self.request('POST', '/api/candidates/402/links', {
+            'category': 'project', 'title': 'My own project', 'url': 'https://example.com/mine', 'skill_id': 1,
+        })
+        with redirect_stdout(io.StringIO()):
+            seed()
+        _, after = await self.request('GET', '/api/candidates/402/profile')
+        self.assertEqual(len(after['materials']), len(before['materials']) + 1)
+        self.assertIn('My own project', [item['title'] for item in after['materials']])
 
     async def test_undo_is_scoped_to_pair_and_side(self):
         employer = {**self.vote, 'actor': 'employer'}
@@ -113,27 +125,50 @@ class SwipeApiTests(unittest.IsolatedAsyncioTestCase):
         _, still_blocked = await self.request('POST', path, {'company_id': company['id'], 'candidate': profile})
         self.assertFalse(still_blocked['dealbreakers_passed'])
 
-    async def test_organizer_requires_evidence_not_swipe_interactions(self):
+    async def test_seeded_event_has_evidence_backed_introductions(self):
         _, companies = await self.request('GET', '/api/companies')
+        eligible = set()
         for company in companies:
             status, matches = await self.request('GET', f"/api/companies/{company['id']}/matches")
             self.assertEqual(status, 200)
             self.assertEqual(len(matches), 15)
-            self.assertFalse(any(m['dealbreakers_passed'] and m['meets_threshold'] for m in matches))
-        # Existing demo persona 402 has the language and skill claims for company 1.
-        # Attach synthetic project proof to its three actual must-have skills.
-        company = companies[0]
-        for skill in company['must_have_skills']:
-            status, _ = await self.request('POST', '/api/candidates/402/links', {
-                'category': 'project', 'title': 'Synthetic hackathon project',
-                'url': 'https://example.com/synthetic-project', 'skill_id': skill['skill_id'],
-            })
-            self.assertEqual(status, 200)
+            eligible |= {company['id'] for m in matches if m['dealbreakers_passed'] and m['meets_threshold']}
+        # Every booth but Kuura Software (only strong candidate needs visa sponsorship) has a suggestion.
+        self.assertEqual(eligible, {company['id'] for company in companies} - {8})
+
+    async def test_organizer_requires_evidence_not_swipe_interactions(self):
+        # Seeded proof makes persona 402 eligible for company 1 without any swipes.
         _, matches = await self.request('GET', '/api/companies/1/matches')
         match = next(m for m in matches if m['candidate_id'] == 402)
-        self.assertEqual(match['total_score'], 75)
+        self.assertEqual(match['total_score'], 85)
         self.assertTrue(match['dealbreakers_passed'] and match['meets_threshold'])
         self.assertEqual((await self.request('GET'))[1], [])  # no swipes/likes needed
+        # Removing the proof drops the same claims to listed skills and below the threshold.
+        _, profile = await self.request('GET', '/api/candidates/402/profile')
+        for item in profile['materials']:
+            self.assertEqual((await self.request('DELETE', f"/api/candidates/402/materials/{item['id']}"))[0], 200)
+        _, matches = await self.request('GET', '/api/companies/1/matches')
+        match = next(m for m in matches if m['candidate_id'] == 402)
+        self.assertFalse(match['meets_threshold'])
+
+    async def test_meeting_request_reveals_identity_only_on_mutual_interest(self):
+        path = '/api/companies/1/matches/Talent #402/accept'  # ASGI paths arrive decoded
+        status, pending = await self.request('POST', path)
+        self.assertEqual(status, 200)
+        self.assertFalse(pending['revealed'])
+        self.assertIsNone(pending['full_name'])
+        self.assertIsNone(pending['email'])
+        self.assertTrue(pending['conversation_starter'])
+        # The request is recorded as the employer's interest.
+        self.assertEqual((await self.request('GET'))[1], [{**self.vote, 'actor': 'employer'}])
+        # Once the candidate also chooses the company, the contact is shared.
+        await self.request('PUT', value=self.vote)
+        _, mutual = await self.request('POST', path)
+        self.assertTrue(mutual['revealed'])
+        self.assertEqual(mutual['email'], 'talent402@example.com')
+        # A candidate who passed is never revealed.
+        await self.request('PUT', value={**self.vote, 'decision': 'pass'})
+        self.assertFalse((await self.request('POST', path))[1]['revealed'])
 
     async def test_invalid_votes_do_not_write(self):
         for field, value, expected in [('actor', 'unknown', 422), ('decision', 'yes', 422), ('candidate_id', -1, 422), ('candidate_id', 99999, 404), ('company_id', 99999, 404)]:

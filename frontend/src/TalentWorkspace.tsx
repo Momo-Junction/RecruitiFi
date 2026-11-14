@@ -24,12 +24,16 @@ const select = 'min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 te
 const primary = 'rounded-lg bg-espoo px-4 py-2.5 text-sm font-semibold text-white enabled:cursor-pointer enabled:hover:bg-blue-900 disabled:opacity-50'
 const format = new Intl.NumberFormat('en', { maximumFractionDigits: 1 })
 
-function MatchBreakdown({ match, busy, onClose }: {
+function MatchBreakdown({ match, busy, onClose, interested, employerInterested, onInterested }: {
   match: Match
   busy: boolean
   onClose: () => void
+  interested: boolean
+  employerInterested: boolean
+  onInterested: () => Promise<void>
 }) {
-  const [requested, setRequested] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
   const eligible = match.dealbreakers_passed && match.meets_threshold
   const status = eligible
     ? 'Eligible to Book 1:1'
@@ -67,10 +71,20 @@ function MatchBreakdown({ match, busy, onClose }: {
           </div>
         ))}
       </div>
-      <button type="button" disabled={busy || !eligible || requested} onClick={() => setRequested(true)} className={`mt-5 ${primary}`}>
-        Request 1:1 Meeting
+      {employerInterested && !interested && <p className="mt-4 text-sm font-semibold text-emerald-800">♥ This employer has asked to meet you</p>}
+      <button type="button" disabled={busy || saving || interested} onClick={async () => {
+        setSaving(true)
+        setError('')
+        try { await onInterested() } catch { setError('Could not save your interest. Try again.') } finally { setSaving(false) }
+      }} className={`mt-4 ${primary}`}>
+        {interested ? '✓ Interest shared' : employerInterested ? 'Accept 1:1 Meeting' : 'I’d like to meet'}
       </button>
-      {requested && <p role="status" className="mt-2 text-sm text-slate-600">Demo meeting request recorded for this preview.</p>}
+      <p role="status" className="mt-2 text-sm text-slate-600">
+        {interested
+          ? employerInterested ? 'Mutual interest: the employer can now see your name and email.' : 'Your name and email are shared only if this employer also asks to meet you.'
+          : 'Employers see only your candidate code until you both choose to meet.'}
+      </p>
+      {error && <p role="alert" className="mt-1 text-sm text-red-800">{error}</p>}
     </section>
   )
 }
@@ -254,7 +268,10 @@ export function TalentWorkspace({ candidates, companies, skills, onSaved, swipeS
               <span aria-hidden="true" className="text-espoo">{openCompany === company.id ? '−' : '+'}</span>
             </button>
             {openCompany === company.id && match && (
-              <MatchBreakdown key={candidate.id} match={match} busy={busy} onClose={() => setOpenCompany(null)} />
+              <MatchBreakdown key={candidate.id} match={match} busy={busy} onClose={() => setOpenCompany(null)}
+                interested={own.some((row) => row.company_id === company.id && row.decision === 'like')}
+                employerInterested={likedBy.has(company.id)}
+                onInterested={() => swipeStore.decide({ candidate_id: candidate.id, company_id: company.id, actor: 'talent', decision: 'like' })} />
             )}
           </div>
         ))}

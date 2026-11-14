@@ -27,11 +27,10 @@ export interface RankedMatch extends Match {
   nice_to_have_skills: SkillSignal[]
 }
 
-export interface MeetingContact {
-  full_name: string
-  email: string
-  conversation_starter: string
-}
+export type MeetingContact = { conversation_starter: string } & (
+  | { revealed: true; full_name: string; email: string }
+  | { revealed: false; full_name: null; email: null }
+)
 
 export interface Company {
   id: number

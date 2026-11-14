@@ -720,9 +720,11 @@ Saved-profile construction deliberately downgrades legacy seed skill evidence to
 self-declared until saved supporting materials exist. It derives CV/portfolio
 availability from actual saved materials, not legacy seed booleans. With no
 materials, even all 90 skill-weight points at multiplier 0.7 yield at most 63,
-with zero profile-proof points. The seeded company thresholds are 70–75. Thus
-15 candidates / 8 companies / 40 skills with no materials legitimately gives zero
-introductions and eight booths needing help. The endpoint and frontend field
+with zero profile-proof points. The seeded company thresholds are 70–75. Events
+seeded before synthetic proof materials were added to the seed therefore show zero
+introductions and eight booths needing help. The current seed attaches labelled
+synthetic CVs, project and certificate links, and gives introductions at seven
+booths. The endpoint and frontend field
 names agree; no matching/filter bug was found. Live API inspection without
 credentials returned 401; this diagnosis was reproduced on an isolated seeded DB,
 not by modifying or inspecting the deployed database's private records.

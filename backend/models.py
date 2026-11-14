@@ -122,6 +122,8 @@ class RankedMatch(CompanyMatch):
 
 
 class MeetingContact(BaseModel):
-    full_name: str
-    email: str
+    # Identity is only filled in when the candidate has also liked the company.
+    revealed: bool
+    full_name: str | None = None
+    email: str | None = None
     conversation_starter: str

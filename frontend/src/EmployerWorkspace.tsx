@@ -127,11 +127,16 @@ function QuickRoleBuilder({ company, skills, onSave, onClose }: {
   )
 }
 
-function CandidateSignal({ match, companyId }: { match: RankedMatch; companyId: number }) {
+function CandidateSignal({ match, companyId, swipeStore }: { match: RankedMatch; companyId: number; swipeStore: SwipeStore }) {
   const [contact, setContact] = useState<MeetingContact>()
   const [accepting, setAccepting] = useState(false)
   const [reviewed, setReviewed] = useState(false)
   const [error, setError] = useState('')
+  const liked = (actor: 'talent' | 'employer') => swipeStore.swipes.some((row) =>
+    row.candidate_id === match.candidate_id && row.company_id === companyId && row.actor === actor && row.decision === 'like')
+  const candidateInterested = liked('talent')
+  const waitingForCandidate = liked('employer') && !candidateInterested
+  const revealed = contact?.revealed ? contact : undefined
   const signals = [...match.must_have_skills, ...match.nice_to_have_skills].filter(({ evidence_tier }) => evidence_tier !== 'missing')
   return (
     <li className="rounded-xl border border-slate-200 p-4">
@@ -156,20 +161,32 @@ function CandidateSignal({ match, companyId }: { match: RankedMatch; companyId: 
           <label className="mt-2 flex items-start gap-2"><input type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)} />I have reviewed this profile and would like a conversation.</label>
         </div>
       )}
-      {contact ? (
+      {candidateInterested && !revealed && <p className="mt-3 text-xs font-semibold text-emerald-800">♥ This candidate is interested in your company</p>}
+      {revealed ? (
         <div className="mt-4 rounded-lg border border-blue-100 bg-mist/60 p-3 text-sm" aria-live="polite">
-          <p className="font-bold">{contact.full_name}</p>
-          <a href={`mailto:${contact.email}`} className="break-all text-espoo underline">{contact.email}</a>
-          <p className="mt-2 font-semibold text-espoo">{contact.conversation_starter}</p>
+          <p className="text-xs font-semibold text-emerald-800">Mutual interest · contact shared with consent</p>
+          <p className="mt-1 font-bold">{revealed.full_name}</p>
+          <a href={`mailto:${revealed.email}`} className="break-all text-espoo underline">{revealed.email}</a>
+          <p className="mt-2 font-semibold text-espoo">{revealed.conversation_starter}</p>
+        </div>
+      ) : waitingForCandidate ? (
+        <div className="mt-4 rounded-lg border border-blue-100 bg-mist/60 p-3 text-sm" aria-live="polite">
+          <p className="font-bold">Meeting request sent</p>
+          <p className="mt-1 text-slate-600">Their name and email are shared only if they also choose your company. Identity stays private until then.</p>
+          {contact && <p className="mt-2 font-semibold text-espoo">{contact.conversation_starter}</p>}
         </div>
       ) : (
         <button type="button" disabled={accepting || ((!match.dealbreakers_passed || !match.meets_threshold) && !reviewed)} className={`mt-4 ${button}`} onClick={async () => {
           setAccepting(true)
           setError('')
-          try { setContact(await acceptCompanyMeeting(companyId, match.anonymous_code, reviewed)) }
+          try {
+            const result = await acceptCompanyMeeting(companyId, match.anonymous_code, reviewed)
+            swipeStore.record({ candidate_id: match.candidate_id, company_id: companyId, actor: 'employer', decision: 'like' })
+            setContact(result)
+          }
           catch (cause) { setError((cause as Error).message) }
           finally { setAccepting(false) }
-        }}>{accepting ? 'Accepting…' : 'Accept 1:1 Meeting'}</button>
+        }}>{accepting ? 'Sending…' : candidateInterested ? 'Accept 1:1 Meeting' : 'Request 1:1 Meeting'}</button>
       )}
       {error && <p role="alert" className="mt-2 text-sm text-red-800">{error}</p>}
     </li>
@@ -264,7 +281,7 @@ export function EmployerWorkspace({ companies, skills, candidates, onCompanySave
             <p role="status" className="text-sm font-semibold text-espoo">{visibleMatches.length} {showAll ? 'profiles to explore' : 'suggested conversations'}</p>
             {visibleMatches.length === 0 && <p className="mt-3 rounded-lg bg-mist p-4 text-sm">No suggestions yet. Explore all talent to find potential beyond the role requirements.</p>}
             <ul className="mt-3 space-y-3">
-              {visibleMatches.map((match) => <CandidateSignal key={match.anonymous_code} match={match} companyId={company.id} />)}
+              {visibleMatches.map((match) => <CandidateSignal key={match.anonymous_code} match={match} companyId={company.id} swipeStore={swipeStore} />)}
             </ul>
           </div>
         )}
