@@ -175,7 +175,7 @@ export function loadSwipes(signal: AbortSignal) {
   return get<SwipeDecision[]>('swipes', signal)
 }
 
-export async function saveSwipe(swipe: SwipeDecision): Promise<SwipeDecision> {
+export async function saveSwipe(swipe: SwipeDecision): Promise<SwipeDecision & { mutual_match: boolean }> {
   const response = await fetch(`${apiUrl}/api/swipes`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(swipe),
   })
@@ -186,4 +186,27 @@ export async function saveSwipe(swipe: SwipeDecision): Promise<SwipeDecision> {
 export async function undoSwipe(swipe: Pick<SwipeDecision, 'actor' | 'candidate_id' | 'company_id'>) {
   const response = await fetch(`${apiUrl}/api/swipes/${swipe.actor}/${swipe.candidate_id}/${swipe.company_id}`, { method: 'DELETE' })
   if (!response.ok) throw new Error('Could not undo your swipe. Please try again.')
+}
+
+export interface DemoNotification {
+  id: number
+  candidate_id: number
+  company_id: number
+  recipient: 'talent' | 'employer'
+  kind: 'interest' | 'match'
+  message: string
+  created_at: string
+  read_at: string | null
+}
+export interface NotificationInbox {
+  entries: DemoNotification[]
+  unread_count: number
+}
+export function loadNotifications(recipient: DemoNotification['recipient'], identityId: number, signal: AbortSignal) {
+  return get<NotificationInbox>(`notifications/${recipient}/${identityId}`, signal)
+}
+export async function markNotificationRead(recipient: DemoNotification['recipient'], identityId: number, id: number) {
+  const response = await fetch(`${apiUrl}/api/notifications/${recipient}/${identityId}/${id}/read`, { method: 'PUT' })
+  if (!response.ok) throw new Error('Could not mark notification as read.')
+  return response.json() as Promise<NotificationInbox>
 }
