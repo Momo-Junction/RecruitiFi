@@ -1,15 +1,28 @@
-# RecruitiFi on CSC Rahti 2 — infrastructure prepared, hosted deployment blocked
+# RecruitiFi on CSC Rahti 2 — locally validated shared demo
 
-**Do not deploy this checkout publicly.** Inspection of commit `be8131b` found no
-`TALENTMATCH_HOSTED_DEMO` handling, demo-password authentication, `/healthz`,
-production static server, Dockerfile, Kubernetes files, or `render.yaml`.
-The requested shared-password protection does not exist in this branch. At the
-owner's direction, authentication was **not** added. The container launcher refuses
-hosted mode even when a Secret supplies a password. Do not disable that guard in
-Rahti: integrate and separately review an authenticated hosted baseline first.
-No CSC login, cluster connection, build, deployment or resource creation was
-performed while preparing these files. Commands below are for a later authorized
-operator. This is a shared event demo: **synthetic candidates and documents only**.
+Hosted startup now uses a minimal shared-demo HTTP Basic gate. With
+`TALENTMATCH_HOSTED_DEMO=1`, the username is `demo` and the password comes only
+from `TALENTMATCH_DEMO_PASSWORD` (the Deployment references a Kubernetes Secret).
+Missing/blank passwords or invalid hosted-mode configuration fail startup.
+Invalid or missing request credentials return 401 with a browser login challenge.
+The frontend, compiled assets, API, documentation and downloads are protected;
+only exact GET/HEAD `/healthz` is exempt for probes. Authorized hosted responses
+use Cache-Control: no-store. Local development with hosted mode unset/0 remains
+unchanged. Use HTTPS for every hosted credential exchange.
+
+Root cause of the previous blocker: `backend/container_start.py` unconditionally
+raised after validating the password because authentication did not exist. That
+fail-closed guard was appropriate for the earlier infrastructure-only scope. The
+now-authorized isolated middleware replaces the unconditional rejection; security
+checks were not bypassed. No account system or business rules were introduced.
+
+No CSC login, cluster connection, cluster build, deployment or resource creation
+was performed. **Real Rahti admission, PVC permissions and HTTPS must still be
+tested by an authorized operator before public use.** Commands below are for
+that later test. This shared demo must use **synthetic candidates/documents only**.
+Everyone with the shared password has the existing demo access; this does not
+implement candidate ownership, per-user authorization, audit identity or account
+management. Never use the shared demo for personal or confidential information.
 
 ## Contents and scope
 
@@ -23,11 +36,12 @@ operator. This is a shared event demo: **synthetic candidates and documents only
 - `test_container.py`: local-only synthetic smoke and persistence test; cleans up
   only its uniquely named containers and volume.
 - `backend/container_start.py`: non-root/data-path checks, group-write umask,
-  explicit hosted-mode blocker, single Uvicorn worker, 8080/0.0.0.0 binding.
+  hosted configuration validation, single Uvicorn worker, 8080/0.0.0.0 binding.
 - Minimal application deployment changes: health endpoint, conditional static
   mount after API routes gated by the container-only `TALENTMATCH_SERVE_FRONTEND=1`
   image environment variable, production-relative API base URL. No schema, scoring,
-  UI, authentication or API request/response changes were made.
+  UI or business API request/response changes were made. Hosted-only access
+  protection is isolated in `backend/demo_auth.py` with focused tests.
 
 The repository documents pnpm, has a v9 pnpm lockfile and pnpm workspace build
 policy. It also contains an npm lockfile and existing CI uses npm; these are
@@ -96,7 +110,10 @@ pnpm lockfile. The test starts only on a loopback-bound ephemeral port, as UID
 and no new privileges. It uses a new disposable Docker volume, initializes only
 that test database once, uploads synthetic PDF-signature test bytes, recreates
 the container and verifies download and a new database write. It also checks
-missing password, unsupported hosted authentication and root all fail startup.
+missing/blank passwords and root all fail startup. It also starts a hosted
+container against the same synthetic event and verifies valid credentials succeed
+while absent, malformed and wrong credentials are rejected for HTML, JS, API, docs
+and persisted downloads. Health remains available without authentication.
 No password is embedded in the image or test output. Test-created data is removed.
 
 Docker initializes an empty named volume from the image directory metadata;
@@ -130,8 +147,9 @@ change is needed for a single same-origin service.
 
 ## Later: project and Secret (do not run until authorized)
 
-First resolve and review hosted authentication. The manifest intentionally sets
-hosted mode to 1, so this checkout will fail closed rather than publish an open API.
+The manifest sets hosted mode to 1. Create its required Secret before starting
+the Deployment; a missing/blank password must fail closed. Keep the public Route
+absent until storage and authenticated access have passed the operator checks.
 
 Use the Login Command from the [Rahti web console](https://console.rahti.csc.fi/),
 or `oc login https://api.2.rahti.csc.fi:6443 --web` if supported by your CLI.
@@ -169,8 +187,9 @@ trap - EXIT
 
 For rotation use a protected operator procedure to replace the Secret, then
 restart the Deployment; an environment variable does not update in existing Pods.
-A Secret reference is configuration, not authentication: it does not remove the
-current blocker.
+The middleware consumes this environment value at process startup. Restart after
+rotation. Browsers may retain old HTTP Basic credentials and prompt again; there
+is no application login/logout page or password in the React build.
 
 ## Later: build inside Rahti (the sole cluster image workflow)
 
@@ -222,8 +241,8 @@ quotas still need testing on Rahti. Dependencies are installed during build only
 
 ## Later: render and apply
 
-**Blocked for this checkout.** After hosted authentication has been implemented
-and verified, render the namespace/tag into a local ignored output directory.
+After choosing the project, creating its Secret and building a release image,
+render the namespace/tag into a local ignored output directory.
 Kubernetes does not expand shell variables in `image:` automatically.
 
 ```sh
@@ -371,16 +390,16 @@ No restore command was executed during repository preparation.
 
 ## Troubleshooting and safe removal
 
-- **Hosted authentication is not implemented:** expected hard blocker for this
-  checkout. A password Secret does not implement authentication. Do not turn
-  hosted mode off to work around this on a public cluster.
+- **401/browser password prompt:** use username `demo` and the password in the
+  Secret. Confirm the Pod restarted after rotation; clear stale browser credentials
+  if necessary. Never turn hosted mode off to work around authentication.
 - **Missing Secret/password:** create the named Secret/key with a nonempty value;
   do not put it in image build args or logs.
 - **Permission denied / SQLite readonly:** inspect assigned identity, Pod SCC,
   directory ownership and group modes; verify CSI fsGroup support. Ask CSC support
   about a platform storage issue; never fix with root/chmod 777/fixed IDs.
 - **CrashLoop after pull:** inspect previous logs, data path, Secret and the hosted
-  blocker. Do not reseed as a repair step.
+  configuration. Do not reseed as a repair step.
 - **PVC Pending/Multi-Attach:** inspect events, quota and storage class; wait for
   the old pod/volume attachment to terminate. Do not switch to RollingUpdate.
 - **OOMKilled / upload failures:** inspect memory limits and 10MB upload limit;
@@ -420,7 +439,7 @@ Local test results are recorded in the final report. Neither local Docker volume
 permissions nor public-schema YAML validation prove Rahti admission, project
 quotas, storage-class availability, CSI fsGroup/SELinux, HTTPS routing, graceful
 node eviction or restoration on actual Rahti storage. All still require a later
-authorized cluster test. End-to-end hosted access is blocked by missing auth.
+authorized cluster test. Hosted access is locally tested; actual HTTPS/Route access remains unverified.
 
 ## Local verification results (14 November 2026)
 
@@ -428,17 +447,17 @@ authorized cluster test. End-to-end hosted access is blocked by missing auth.
 | --- | --- | --- |
 | Docker build | PASS | linux/amd64, pinned Node/Python bases and frozen pnpm lockfile |
 | Frontend production build | PASS | Node 22 build inside Docker; no development API host in bundle |
-| Backend checks | PASS | 10 tests on host and inside Python 3.13 image |
+| Backend checks | PASS | 21 tests on host and inside Python 3.13 image |
 | Arbitrary non-root identity | PASS locally | UID 1000620000 then 1000620001, group 0, read-only rootfs |
 | Persistence | PASS locally | Same disposable volume, WAL mode, synthetic BLOB after recreation, changed-UID write |
 | Backup | PASS locally | SQLite backup API, integrity check and restore into an in-memory DB |
-| Missing password/root/hosted guard | PASS | All fail clearly without exposing an unauthenticated hosted server |
+| Missing password/root guard | PASS | Missing/blank passwords and root fail; valid hosted configuration starts |
 | Image content audit | PASS | No DB/env/Git/test files; readable assets and no development API base |
 | Core Kubernetes schema validation | PASS | kubeconform strict: PVC, Deployment, Service (3/3) |
 | Route YAML/policy checks | PASS | Parses; Service target, named port, edge TLS and Redirect verified |
 | Route schema / Rahti admission | NOT VERIFIED | Available legacy schema incorrectly requires server-owned status; no cluster contacted |
 | Actual SCC/CSI PVC, fsGroup, SELinux, HTTPS | NOT TESTED | Requires later authorized Rahti test |
-| Hosted authenticated deployment | BLOCKED | Authentication absent; owner requested infrastructure-only preparation |
+| Hosted authentication/startup | PASS locally | Valid requests succeed; missing, malformed and wrong credentials return 401 for HTML/JS/API/docs/downloads |
 
 The initial changed-UID test failed on SQLite mode 0644; exclusive 0660 precreation
 in the launcher fixed it, and the full local test then passed. The amd64 build
@@ -456,7 +475,7 @@ docker run --rm \
   /manifests/pvc.yaml /manifests/deployment.yaml /manifests/service.yaml
 ```
 
-## Deployment review follow-up (14 November 2026)
+## Historical infrastructure review (before shared authentication)
 
 Comparison baseline: `be8131b` (the parent of the deployment work). Before review
 fixes, the deployment range contained 16 one-file commits. Review found and fixed
@@ -521,62 +540,144 @@ Use native validator architecture on other machines; linux/arm64 above is for th
 Apple Silicon host, not the application image architecture. All four manifests
 also parsed as YAML and passed selector/port/Secret/PVC/security/resource policy
 assertions. Existing Route schema/admission limitations remain as reported above.
-No CSC endpoint was contacted. No manifests were applied. **Overall public Rahti
-deployment: FAIL / blocked by absent hosted authentication.** Actual SCC/CSI/TLS,
+The historical review stopped at the absent-authentication blocker. The later
+shared-authentication fix described above supersedes that blocker. Actual SCC/CSI/TLS,
 Route admission and cluster deployment remain **NOT TESTED**.
 
-### Exact existing application source diff
+## Hosted authentication validation (14 November 2026)
 
-The following is the entire diff to existing application source against the
-pre-deployment baseline. These operational additions are required because the
-baseline has neither production static serving nor /healthz and defaults the
-production API to localhost. The new container-only launcher remains separately
-reviewable in `backend/container_start.py`.
+The old unconditional startup rejection has been replaced by isolated shared HTTP
+Basic authentication in `backend/demo_auth.py`. It uses constant-time byte
+comparisons and a UTF-8 Basic challenge. Both launcher and direct
+`backend.main:app` startup validate configuration before writes or service startup.
+Never use this shared credential for real candidate data. No password is hardcoded
+or passed in an image build argument; no new Python dependency is required.
+
+Local results:
+
+- **PASS:** linux/amd64 Docker build using the existing Dockerfile and lockfiles.
+- **PASS:** 21 backend/preflight/authentication tests, both on host and in the image.
+- **PASS:** existing frontend type check and production build (`npm run build`).
+- **PASS:** arbitrary UIDs, read-only rootfs, 8080, health, static serving, API,
+  fresh schema initialization without reseeding, SQLite WAL/upload persistence,
+  backup integrity, and changed-UID writes from the existing container checks.
+- **PASS:** hosted mode starts with a generated synthetic password; username
+  `demo` succeeds on HTML, JS, API, docs and stored downloads; absent/malformed/
+  wrong usernames or passwords get 401 and a Basic challenge. Health is public.
+  An unauthenticated upload is rejected; an authenticated synthetic upload is
+  retrieved after another hosted container recreation under a different UID.
+- **PASS:** missing/blank configured passwords stop the container. Invalid hosted
+  mode fails unit validation; direct app import also refuses a missing password.
+- **PASS:** image audit found auth module and assets but no embedded password,
+  local .env, databases, Git or test files.
+- **PASS:** four manifest YAMLs and consistency/security assertions; kubeconform
+  strict core schema check reports 3 valid, 0 invalid/errors/skipped.
+- **NOT TESTED:** actual Rahti SCC admission, project fsGroup/SELinux, CSI PVC,
+  in-cluster image build, Route admission and end-to-end HTTPS.
+
+The current CSC documentation still specifies rahti-restricted-v2, project-assigned
+UID/fsGroup/SELinux and its platform seccomp default. Existing manifests leave
+those identities/seccomp to the platform, drop capabilities and prohibit privilege
+escalation. No Kubernetes, Dockerfile, schema, matching, frontend or dependency
+changes were needed for the auth fix. All existing storage/runtime tests remain;
+the obsolete expected authentication-blocker failure now tests successful hosted
+startup and rejected requests instead.
+
+Reproduce local validation (no CSC connection):
+
+```sh
+docker buildx build --platform linux/amd64 --load -t recruitifi:rahti-local .
+python3 deploy/rahti/test_container.py recruitifi:rahti-local
+backend/.venv/bin/python -m unittest discover -s backend -t . -p 'test_*.py' -v
+(cd frontend && npm run build)
+# All backend checks inside the production runtime with temporary test-only mounts:
+docker run --rm --platform linux/amd64 --user 1000620000:0 --read-only \
+  --tmpfs /tmp:rw,size=64m,mode=1770,uid=1000620000,gid=0 --entrypoint python \
+  --mount type=bind,src="$PWD/backend/test_swipes.py",dst=/app/backend/test_swipes.py,readonly \
+  --mount type=bind,src="$PWD/backend/test_container_start.py",dst=/app/backend/test_container_start.py,readonly \
+  --mount type=bind,src="$PWD/backend/test_demo_auth.py",dst=/app/backend/test_demo_auth.py,readonly \
+  recruitifi:rahti-local -m unittest discover -s backend -t . -p 'test_*.py' -v
+```
+
+For manual hosted requests use the browser's Basic prompt (`demo`) or `curl --user
+demo https://<actual-route-host>/api/companies` (curl prompts for the password; do
+not put it in a command argument). Missing credentials must give 401 for `/`, API,
+assets and documents, while `/healthz` gives 200. Obtain the real Route hostname
+using the earlier runbook command; never invent one. Perform this later only on
+an authorized deployment with HTTPS, after validating the assigned storage identity.
+
+Secret creation, rotation, one-time empty-event seeding, backups, restoring and
+safe resource removal remain as documented above. No data was overwritten, and
+no commit, push or cluster deployment was performed for this fix.
+
+### Exact integration diff for this hosted-auth fix
+
+New authentication implementation and focused tests are in `backend/demo_auth.py`
+and `backend/test_demo_auth.py`. Existing startup integration changes:
 
 ```diff
+diff --git a/backend/container_start.py b/backend/container_start.py
+index 4e57412..bd5232f 100644
+--- a/backend/container_start.py
++++ b/backend/container_start.py
+@@ -2,17 +2,13 @@
+ import os
+ from pathlib import Path
+
++from .demo_auth import hosted_password
++
+
+ def validate_runtime():
+     if os.geteuid() == 0:
+         raise RuntimeError("Run with a platform-assigned non-root UID; root runtime is not supported.")
+-    if os.environ.get("TALENTMATCH_HOSTED_DEMO") == "1":
+-        if not os.environ.get("TALENTMATCH_DEMO_PASSWORD", "").strip():
+-            raise RuntimeError("TALENTMATCH_DEMO_PASSWORD is required for hosted demo mode.")
+-        raise RuntimeError(
+-            "Hosted demo authentication is not implemented in this checkout. "
+-            "Deployment is blocked; do not expose this unauthenticated application."
+-        )
++    hosted_password()  # Fail closed before any data writes if hosted config is invalid.
+     database = Path(os.environ.get("TALENTMATCH_DB", ""))
+     if not database.is_absolute() or database.parent != Path("/var/data"):
+         raise RuntimeError("Container TALENTMATCH_DB must be an absolute file path directly in /var/data.")
 diff --git a/backend/main.py b/backend/main.py
-index 3543504..4db786e 100644
+index 4db786e..8ff81a4 100644
 --- a/backend/main.py
 +++ b/backend/main.py
-@@ -1,10 +1,12 @@
- import json
- import os
-+from pathlib import Path
- from typing import Literal
- from contextlib import asynccontextmanager
- 
- from fastapi import FastAPI, HTTPException, Query
+@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException, Query
  from fastapi.middleware.cors import CORSMiddleware
-+from fastapi.staticfiles import StaticFiles
- 
+ from fastapi.staticfiles import StaticFiles
+
++from .demo_auth import DemoAuthMiddleware, hosted_password
  from .database import SCHEMA_PATH, connect
  from .matching_engine import LANGUAGE_LEVELS, SCORING_VERSION, calculate_match
-@@ -313,3 +315,14 @@ def undo_swipe(actor: Literal['talent', 'employer'], candidate_id: PositiveId, c
-             (actor, candidate_id, company_id),
-         )
-     return {'deleted': True}
+ from .models import (
+@@ -31,6 +32,7 @@ CANDIDATE_JSON_FIELDS = ("languages", "skills")
+
+ @asynccontextmanager
+ async def lifespan(app: FastAPI):
++    hosted_password()
+     with connect() as connection:
+         connection.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+         connection.execute(
+@@ -40,6 +42,8 @@ async def lifespan(app: FastAPI):
+     yield
+
+
++# Validate hosted configuration before Uvicorn can accept requests, including direct launches.
++hosted_password()
+ app = FastAPI(title="City of Espoo TalentMatch", lifespan=lifespan)
+ app.include_router(profile_router)
+ app.add_middleware(
+@@ -55,6 +59,9 @@ app.add_middleware(
+     allow_headers=["Content-Type"],
+ )
+
++# Outermost middleware protects static files, docs, downloads and every API method.
++app.add_middleware(DemoAuthMiddleware)
 +
-+
-+@app.get("/healthz", include_in_schema=False)
-+def healthz():
-+    return {"status": "ok"}
-+
-+
-+# Container builds supply these assets; local Vite development is unchanged.
-+_frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
-+if os.environ.get("TALENTMATCH_SERVE_FRONTEND") == "1" and (_frontend_dist / "index.html").is_file():
-+    app.mount("/", StaticFiles(directory=_frontend_dist, html=True), name="frontend")
-diff --git a/frontend/src/api.ts b/frontend/src/api.ts
-index fdce1a4..8e62dfd 100644
---- a/frontend/src/api.ts
-+++ b/frontend/src/api.ts
-@@ -85,7 +85,7 @@ export interface Match {
-   improvement_hints: ImprovementHint[]
- }
- 
--const apiUrl = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
-+const apiUrl = (import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://127.0.0.1:8000')).replace(/\/$/, '')
- 
- export type MaterialCategory = 'cv' | 'project' | 'certificate' | 'research' | 'linkedin' | 'github' | 'website'
- export interface ProfileMaterial {
+
+ def read_rows(query: str, *json_fields: str, params: tuple = ()):
+     with connect() as connection:
 ```
