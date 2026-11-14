@@ -1,3 +1,5 @@
+import { SwipeDeck, type DiscoveryCard } from './SwipeDeck'
+import type { SwipeStore } from './useSwipes'
 import { useEffect, useState } from 'react'
 import {
   acceptCompanyMeeting, loadCompanyMatches, saveCompanyRole,
@@ -166,9 +168,12 @@ function CandidateSignal({ match, companyId }: { match: RankedMatch; companyId: 
   )
 }
 
-export function EmployerWorkspace({ companies, skills, onCompanySaved }: {
+export function EmployerWorkspace({ companies, skills, onCompanySaved, swipeStore }: {
+  swipeStore: SwipeStore
   companies: Company[]; skills: Skill[]; onCompanySaved: (company: Company) => void
 }) {
+  const [view, setView] = useState<'swipe' | 'queue'>('swipe')
+  const [reviewCode, setReviewCode] = useState<string>()
   const [companyId, setCompanyId] = useState(companies[0]?.id)
   const [editing, setEditing] = useState(false)
   const [attempt, setAttempt] = useState(0)
@@ -182,7 +187,7 @@ export function EmployerWorkspace({ companies, skills, onCompanySaved }: {
     const controller = new AbortController()
     loadCompanyMatches(company.id, controller.signal).then((matches) => {
       if (!controller.signal.aborted) setResult({
-        company, attempt, matches: matches.filter((match) => match.dealbreakers_passed && match.meets_threshold), failed: false,
+        company, attempt, matches, failed: false,
       })
     }).catch(() => {
       if (!controller.signal.aborted) setResult({ company, attempt, matches: [], failed: true })
@@ -191,6 +196,18 @@ export function EmployerWorkspace({ companies, skills, onCompanySaved }: {
   }, [company, attempt])
 
   if (!company) return <p>No employers available.</p>
+  const decisions = swipeStore.swipes.filter((row) => row.company_id === company.id)
+  const own = decisions.filter((row) => row.actor === 'employer')
+  const likedBy = new Set(decisions.filter((row) => row.actor === 'talent' && row.decision === 'like').map((row) => row.candidate_id))
+  const eligible = current?.matches.filter((match) => match.dealbreakers_passed && match.meets_threshold) ?? []
+  const cards: DiscoveryCard[] = (current?.matches ?? []).filter((match) => !own.some((row) => row.candidate_id === match.candidate_id)).map((match) => ({
+    id: match.candidate_id, name: match.anonymous_code, subtitle: 'Talent in Espoo · identity stays private',
+    monogram: match.anonymous_code.slice(-2), score: match.total_score,
+    eligible: match.dealbreakers_passed && match.meets_threshold, likedYou: likedBy.has(match.candidate_id),
+    facts: [match.dealbreakers_passed ? 'Language & visa compatible' : 'Check role requirements', `${company.min_match_threshold}% meeting threshold`],
+    skills: [...match.must_have_skills, ...match.nice_to_have_skills].map((skill) => ({ name: skill.skill_name, matched: skill.evidence_tier !== 'missing' })),
+    warnings: [...match.dealbreaker_reasons, ...(!match.meets_threshold ? ['Below your meeting threshold'] : [])],
+  }))
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(21rem,0.9fr)_minmax(0,1.3fr)]">
       <div className="min-w-0">
@@ -214,7 +231,18 @@ export function EmployerWorkspace({ companies, skills, onCompanySaved }: {
           setNotice('Role saved.')
         }} />}
       </div>
-      <section className={`${panel} min-w-0`} aria-labelledby="queue-heading">
+      <div className="order-first min-w-0 lg:order-none">
+        <div className="talent-view-toggle" aria-label="Talent discovery mode">
+          <button type="button" aria-pressed={view === 'swipe'} onClick={() => setView('swipe')}>✦ Discover talent</button>
+          <button type="button" aria-pressed={view === 'queue'} onClick={() => { setReviewCode(undefined); setView('queue') }}>Eligible queue</button>
+        </div>
+        {view === 'swipe' && <SwipeDeck key={company.id} cards={cards} loading={!current || !swipeStore.ready} error={swipeStore.error || (current?.failed ? 'Could not load candidate scores.' : '')}
+          onRetry={() => { swipeStore.retry(); setAttempt((value) => value + 1) }}
+          onUndo={(candidate_id) => swipeStore.undo({ candidate_id, company_id: company.id, actor: 'employer' })}
+          onDecide={(candidate_id, decision) => swipeStore.decide({ candidate_id, company_id: company.id, actor: 'employer', decision })}
+          saved={own.filter((row) => row.decision === 'like').map((row) => ({ id: row.candidate_id, name: current?.matches.find((match) => match.candidate_id === row.candidate_id)?.anonymous_code ?? 'Talent', mutual: likedBy.has(row.candidate_id) }))}
+          onReview={(id) => { setReviewCode(current?.matches.find((match) => match.candidate_id === id)?.anonymous_code); setView('queue') }} />}
+      <section hidden={view !== 'queue'} className={`${panel} min-w-0`} aria-labelledby="queue-heading">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="queue-heading" className="text-xl font-bold tracking-tight">Blind-First Candidate Signal Queue</h2>
           <span className="rounded-full bg-mist px-3 py-1 text-xs font-semibold text-espoo">Blind Privacy Mode · ON</span>
@@ -224,14 +252,16 @@ export function EmployerWorkspace({ companies, skills, onCompanySaved }: {
         {current?.failed && <p role="alert" className="mt-4 text-sm text-red-800">Could not load the queue. <button type="button" className={link} onClick={() => setAttempt((value) => value + 1)}>Retry</button></p>}
         {current && !current.failed && (
           <div className="mt-4">
-            <p role="status" className="text-sm font-semibold text-espoo">{current.matches.length} eligible {current.matches.length === 1 ? 'candidate' : 'candidates'}</p>
-            {current.matches.length === 0 && <p className="mt-3 rounded-lg bg-mist p-4 text-sm">No candidates meet the saved role requirements.</p>}
+            <p role="status" className="text-sm font-semibold text-espoo">{eligible.length} eligible {eligible.length === 1 ? 'candidate' : 'candidates'}</p>
+            {eligible.length === 0 && <p className="mt-3 rounded-lg bg-mist p-4 text-sm">No candidates meet the saved role requirements.</p>}
+            {reviewCode && !eligible.some((match) => match.anonymous_code === reviewCode) && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm">{reviewCode} does not currently meet your role requirements. Likes are saved, but a meeting requires the minimum score and both dealbreakers.</p>}
             <ul className="mt-3 space-y-3">
-              {current.matches.map((match) => <CandidateSignal key={match.anonymous_code} match={match} companyId={company.id} />)}
+              {eligible.map((match) => <CandidateSignal key={match.anonymous_code} match={match} companyId={company.id} />)}
             </ul>
           </div>
         )}
       </section>
+      </div>
     </div>
   )
 }
