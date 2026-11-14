@@ -1,4 +1,4 @@
-import { useAiMatches, aiLabel, AiExplanation } from './useAiMatches'
+import { useAiMatches, aiLabel, AiExplanation, displayAiScore } from './useAiMatches'
 import { JobRequirements } from './Jobs'
 import { EmployerEvidence } from './EmployerEvidence'
 import { interestedCandidates } from './useSwipes'
@@ -235,7 +235,7 @@ export function EmployerWorkspace({ companyId, companies, skills, candidates, on
   const likedBy = interestedCandidates(swipeStore.swipes, company.id)
   const cards: DiscoveryCard[] = (aiMatches ?? []).filter((match) => !own.some((row) => row.candidate_id === match.candidate_id)).map((match) => ({
     id: match.candidate_id, name: match.anonymous_code, subtitle: job ? `${job.title} · ${company.name}` : 'Talent in Espoo · identity stays private',
-    monogram: match.anonymous_code.slice(-2), score: match.ai.score, scoreLabel: aiLabel(match.ai),
+    monogram: match.anonymous_code.slice(-2), score: displayAiScore(match.ai), scoreLabel: aiLabel(match.ai),
     eligible: match.dealbreakers_passed && match.ai.score !== null && match.ai.score >= (job?.min_match_threshold ?? company.min_match_threshold), likedYou: likedBy.has(match.candidate_id), interestLabel: 'Interested',
     facts: [match.dealbreakers_passed ? 'Language & visa compatible' : 'Check role requirements', `${job?.min_match_threshold ?? company.min_match_threshold}% meeting threshold`],
     skills: [...match.must_have_skills, ...match.nice_to_have_skills].map((skill) => ({ name: skill.skill_name, matched: match.ai.requirements.some(r => r.skill_id === skill.skill_id && r.status === 'supported') })),
@@ -290,7 +290,7 @@ export function EmployerWorkspace({ companyId, companies, skills, candidates, on
             <div className="mt-4 space-y-4">
               {shortlisted.map(({ candidate_id }) => <EmployerTasks key={company.id + '-' + candidate_id}
                 name={candidates.find(({ id }) => candidate_id === id)?.anonymous_code ?? 'Candidate'}
-                score={current?.matches.find((match) => match.candidate_id === candidate_id)?.total_score}
+                scoreLabel={aiLabel(ai.match(candidate_id,job?.id))}
                 mutual={likedBy.has(candidate_id)} candidateId={candidate_id} companyId={company.id} store={swipeStore} />)}
             </div>}
         </section>}
