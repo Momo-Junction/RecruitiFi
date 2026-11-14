@@ -1,0 +1,13 @@
+{
+  "host_machine": "arm64",
+  "host_system": "Darwin",
+  "daemon_architecture": "aarch64",
+  "daemon_os": "linux",
+  "docker_version": "29.7.2",
+  "image_architecture": "amd64",
+  "image_os": "linux",
+  "image_id": "sha256:7488e8c2efb5d7d088ea493f1f871ad0ba121524e140d8e1062dcc83ccf45664",
+  "image_size_bytes": 127875737,
+  "emulated": true,
+  "warning": "Apple Silicon emulation; not native Linux/amd64 or Rahti performance."
+}
