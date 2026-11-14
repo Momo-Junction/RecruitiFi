@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recruitifi
+  labels:
+    app: recruitifi
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: recruitifi
+  template:
+    metadata:
+      labels:
+        app: recruitifi
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 40
+      securityContext:
+        runAsNonRoot: true
+        # Leave UID, groups, SELinux and seccomp unset for rahti-restricted-v2.
+      containers:
+        - name: recruitifi
+          image: image-registry.openshift-image-registry.svc:5000/REPLACE_NAMESPACE/recruitifi:REPLACE_TAG
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: TALENTMATCH_DB
+              value: /var/data/talentmatch.sqlite3
+            - name: TALENTMATCH_HOSTED_DEMO
+              value: '1'
+            - name: TALENTMATCH_DEMO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: recruitifi-demo
+                  key: TALENTMATCH_DEMO_PASSWORD
+            - name: PORT
+              value: '8080'
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 2
+            failureThreshold: 3
+          volumeMounts:
+            - name: data
+              mountPath: /var/data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: recruitifi-data
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
