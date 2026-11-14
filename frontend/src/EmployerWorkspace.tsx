@@ -1,3 +1,5 @@
+import { interestedCandidates } from './useSwipes'
+import { NotificationBell } from './NotificationBell'
 import { SwipeDeck, type DiscoveryCard } from './SwipeDeck'
 import type { SwipeStore } from './useSwipes'
 import { useEffect, useState } from 'react'
@@ -127,7 +129,7 @@ function QuickRoleBuilder({ company, skills, onSave, onClose }: {
   )
 }
 
-function CandidateSignal({ match, companyId }: { match: RankedMatch; companyId: number }) {
+export function CandidateSignal({ match, companyId, interested = false }: { match: RankedMatch; companyId: number; interested?: boolean }) {
   const [contact, setContact] = useState<MeetingContact>()
   const [accepting, setAccepting] = useState(false)
   const [reviewed, setReviewed] = useState(false)
@@ -136,7 +138,7 @@ function CandidateSignal({ match, companyId }: { match: RankedMatch; companyId: 
   return (
     <li className="rounded-xl border border-slate-200 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-bold">{match.anonymous_code}</h3>
+        <h3 className="font-bold">{match.anonymous_code} {interested && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-900">Interested</span>}</h3>
         <strong className="rounded-lg bg-mist px-2.5 py-1 text-lg tabular-nums text-espoo">{format.format(match.total_score)}%</strong>
       </div>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-emerald-800">
@@ -207,11 +209,11 @@ export function EmployerWorkspace({ companies, skills, candidates, onCompanySave
   const visibleMatches = current?.matches.filter((match) => showAll || (match.dealbreakers_passed && match.meets_threshold)) ?? []
   const decisions = swipeStore.swipes.filter((row) => row.company_id === company.id)
   const own = decisions.filter((row) => row.actor === 'employer')
-  const likedBy = new Set(decisions.filter((row) => row.actor === 'talent' && row.decision === 'like').map((row) => row.candidate_id))
+  const likedBy = interestedCandidates(swipeStore.swipes, company.id)
   const cards: DiscoveryCard[] = (current?.matches ?? []).filter((match) => !own.some((row) => row.candidate_id === match.candidate_id)).map((match) => ({
     id: match.candidate_id, name: match.anonymous_code, subtitle: 'Talent in Espoo · identity stays private',
     monogram: match.anonymous_code.slice(-2), score: match.total_score,
-    eligible: match.dealbreakers_passed && match.meets_threshold, likedYou: likedBy.has(match.candidate_id),
+    eligible: match.dealbreakers_passed && match.meets_threshold, likedYou: likedBy.has(match.candidate_id), interestLabel: 'Interested',
     facts: [match.dealbreakers_passed ? 'Language & visa compatible' : 'Check role requirements', `${company.min_match_threshold}% meeting threshold`],
     skills: [...match.must_have_skills, ...match.nice_to_have_skills].map((skill) => ({ name: skill.skill_name, matched: skill.evidence_tier !== 'missing' })),
     warnings: [...match.dealbreaker_reasons, ...(!match.meets_threshold ? ['Below your meeting threshold'] : [])],
@@ -220,6 +222,7 @@ export function EmployerWorkspace({ companies, skills, candidates, onCompanySave
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(21rem,0.9fr)_minmax(0,1.3fr)]">
       <div className="min-w-0">
         <section className={panel} aria-label="Employer role">
+          <div className="mb-4 flex items-center justify-between gap-3"><h2 className="font-bold">Employer role</h2><NotificationBell key={company.id} recipient="employer" identityId={company.id} /></div>
           <label className="grid gap-2 text-sm font-semibold">
             Company
             <select className={input} value={company.id} disabled={editing} onChange={(event) => {
@@ -248,7 +251,7 @@ export function EmployerWorkspace({ companies, skills, candidates, onCompanySave
           onRetry={() => { swipeStore.retry(); setAttempt((value) => value + 1) }}
           onUndo={(candidate_id) => swipeStore.undo({ candidate_id, company_id: company.id, actor: 'employer' })}
           onDecide={(candidate_id, decision) => swipeStore.decide({ candidate_id, company_id: company.id, actor: 'employer', decision })}
-          saved={own.filter((row) => row.decision === 'like').map((row) => ({ id: row.candidate_id, name: current?.matches.find((match) => match.candidate_id === row.candidate_id)?.anonymous_code ?? 'Talent', mutual: likedBy.has(row.candidate_id) }))}
+          saved={own.filter((row) => row.decision === 'like').map((row) => ({ id: row.candidate_id, name: current?.matches.find((match) => match.candidate_id === row.candidate_id)?.anonymous_code ?? 'Talent', mutual: likedBy.has(row.candidate_id), interested: likedBy.has(row.candidate_id) }))}
           onReview={() => { setShowAll(true); setView('queue') }} />}
       <section hidden={view !== 'queue'} className={`${panel} min-w-0`} aria-labelledby="queue-heading">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -264,7 +267,7 @@ export function EmployerWorkspace({ companies, skills, candidates, onCompanySave
             <p role="status" className="text-sm font-semibold text-espoo">{visibleMatches.length} {showAll ? 'profiles to explore' : 'suggested conversations'}</p>
             {visibleMatches.length === 0 && <p className="mt-3 rounded-lg bg-mist p-4 text-sm">No suggestions yet. Explore all talent to find potential beyond the role requirements.</p>}
             <ul className="mt-3 space-y-3">
-              {visibleMatches.map((match) => <CandidateSignal key={match.anonymous_code} match={match} companyId={company.id} />)}
+              {visibleMatches.map((match) => <CandidateSignal key={match.anonymous_code} match={match} companyId={company.id} interested={likedBy.has(match.candidate_id)} />)}
             </ul>
           </div>
         )}
