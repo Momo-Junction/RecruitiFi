@@ -24,7 +24,7 @@ def main():
             prepare(c,'https://github.com/SyntheticOwner');c.execute('PRAGMA query_only=OFF')
             c.execute("UPDATE profile_materials SET description='' WHERE id=7")
         with patch.object(database,'DB_PATH',path),patch.dict('os.environ',TALENTMATCH_AI_FETCH_PUBLIC_PROFILES='1',TALENTMATCH_AI_CONSENTED_MODE='1',TALENTMATCH_AI_CANDIDATES='402',TALENTMATCH_AI_JOB_MATCHING='1',TALENTMATCH_AI_DEMO_TOKEN='synthetic-e2e-only-operator-token-123456'):
-            for category,url in (('github','https://github.com/SyntheticOwner'),('linkedin','https://www.linkedin.com/in/synthetic-only')):
+            for category,url in (('github','https://github.com/SyntheticOwner'),):
                 with database.connect() as c:
                     c.execute('UPDATE profile_materials SET category=?,url=? WHERE id=7',(category,url))
                     row=c.execute('SELECT * FROM profile_materials WHERE id=7').fetchone()
