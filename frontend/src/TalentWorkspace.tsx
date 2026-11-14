@@ -180,7 +180,7 @@ export function TalentWorkspace({ candidates, companies, skills, onSaved, swipeS
         <p className="mt-1 text-sm leading-relaxed text-slate-600">Build a profile around your experience, projects and qualifications.</p>
         <label className="mt-5 grid gap-1.5 text-sm font-semibold">
           Candidate persona
-          <select disabled={profileBusy} className={select} value={candidate.id} onChange={(event) => {
+          <select disabled={profileBusy} className={select + ' min-h-11 w-full'} value={candidate.id} onChange={(event) => {
             setCandidateId(Number(event.target.value))
             setSkillToAdd('')
             setOpenCompany(null)
@@ -204,7 +204,7 @@ export function TalentWorkspace({ candidates, companies, skills, onSaved, swipeS
             <option value="">Select a skill</option>
             {availableSkills.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
           </select>
-          <button type="submit" className={primary} disabled={!skillToAdd || profileBusy}>Add skill</button>
+          <button type="submit" className={primary + ' min-h-11 shrink-0'} disabled={!skillToAdd || profileBusy}>Add skill</button>
         </form>
         <ul className="mt-3 divide-y divide-slate-100">
           {profile.skills.map(({ skill_id, evidence_tier }) => {

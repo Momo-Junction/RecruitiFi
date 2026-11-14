@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { documentUrl, profileRequest, type MaterialCategory, type SavedProfile, type Skill } from './api'
 
 const sections: { category: MaterialCategory; label: string; help: string; upload: boolean }[] = [
-  { category: 'cv', label: 'CV & résumé', help: 'Your experience, education and contact details.', upload: true },
+  { category: 'cv', label: 'CV', help: 'Your experience, education and contact details.', upload: true },
   { category: 'project', label: 'Projects & portfolio', help: 'Show something you built and explain your contribution.', upload: true },
   { category: 'certificate', label: 'Courses & certificates', help: 'Add the course name, issuer and certificate.', upload: true },
   { category: 'research', label: 'Research & publications', help: 'Share a paper, thesis or published article.', upload: true },
@@ -11,7 +11,7 @@ const sections: { category: MaterialCategory; label: string; help: string; uploa
   { category: 'website', label: 'Personal website', help: 'Your own place on the web.', upload: false },
 ]
 const field = 'w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm'
-const button = 'rounded-lg bg-espoo px-3 py-2 text-sm font-semibold text-white enabled:cursor-pointer disabled:opacity-50'
+const button = 'min-h-11 rounded-lg bg-espoo px-3 py-2 text-sm font-semibold text-white transition-colors enabled:cursor-pointer enabled:hover:bg-blue-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-espoo disabled:opacity-50 motion-reduce:transition-none'
 
 export function ProfileMaterials({ profile, skills, onSaved }: {
   profile: SavedProfile; skills: Skill[]; onSaved: (profile: SavedProfile) => void
@@ -35,9 +35,9 @@ export function ProfileMaterials({ profile, skills, onSaved }: {
             <div key={section.category} className="rounded-xl border border-slate-200 bg-white p-3">
               <div className="flex items-center justify-between gap-2">
                 <h4 className="text-sm font-bold">{section.label}</h4>
-                <button type="button" disabled={busy} aria-expanded={category === section.category} className="text-sm font-semibold text-espoo enabled:cursor-pointer" onClick={() => {
+                <button type="button" disabled={busy} aria-label={section.upload ? 'Add ' + section.label : 'Connect ' + section.label} aria-expanded={category === section.category} className={button + ' w-24 shrink-0'} onClick={() => {
                   setCategory(section.category); setMode(section.upload ? 'upload' : 'link'); setError(''); setNotice('')
-                }}>+ {section.upload ? 'Add' : 'Connect'}</button>
+                }}>{section.upload ? 'Add' : 'Connect'}</button>
               </div>
               <p className="mt-1 text-xs text-slate-600">{section.help}</p>
               <ul className="mt-2 space-y-2">
@@ -93,7 +93,7 @@ export function ProfileMaterials({ profile, skills, onSaved }: {
                 }}>
                   <fieldset disabled={busy} className="min-w-0 space-y-3">
                     {selected.upload && selected.category !== 'cv' && (
-                      <div className="flex gap-2">{(['upload', 'link'] as const).map((option) => <button key={option} type="button" aria-pressed={mode === option}
+                      <div className="flex flex-wrap gap-2">{(['upload', 'link'] as const).map((option) => <button key={option} type="button" aria-pressed={mode === option}
                         onClick={() => setMode(option)} className={`rounded-lg px-3 py-1.5 text-sm ${mode === option ? 'bg-espoo text-white' : 'bg-white text-espoo'}`}>{option === 'upload' ? 'Upload a file' : 'Add a link'}</button>)}</div>
                     )}
                     {['project', 'research', 'certificate'].includes(selected.category) && (
@@ -114,8 +114,8 @@ export function ProfileMaterials({ profile, skills, onSaved }: {
                         <select name="skill" className={field}><option value="">Choose a skill (optional)</option>{skills.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}</select>
                       </label>
                     </>}
-                    <div className="flex gap-3"><button type="submit" className={button}>{busy ? 'Saving…' : mode === 'upload' ? 'Upload and save' : 'Save profile'}</button>
-                      <button type="button" className="text-sm text-espoo underline" onClick={() => setCategory(null)}>Cancel</button></div>
+                    <div className="flex flex-wrap gap-3"><button type="submit" className={button}>{busy ? 'Saving…' : mode === 'upload' ? 'Upload and save' : 'Save profile'}</button>
+                      <button type="button" className="min-h-11 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-espoo transition-colors enabled:cursor-pointer enabled:hover:border-blue-400 enabled:hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-espoo active:bg-blue-100 motion-reduce:transition-none" onClick={() => setCategory(null)}>Cancel</button></div>
                   </fieldset>
                 </form>
               )}

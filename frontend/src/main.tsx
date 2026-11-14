@@ -65,7 +65,6 @@ function App() {
                 <p className="text-sm text-slate-600"><strong className="block text-3xl font-semibold text-espoo">{directory?.companies.length ?? '—'}</strong>Employers to meet</p>
                 <p className="text-sm text-slate-600"><strong className="block text-3xl font-semibold text-espoo">{directory?.candidates.length ?? '—'}</strong>Talent profiles</p>
               </div>
-              <a href="#workspace" className="mt-6 flex items-center justify-between rounded-lg bg-espoo px-4 py-3 font-semibold text-white">Explore your workspace <span aria-hidden="true">→</span></a>
             </aside>
           </div>
         </div>
