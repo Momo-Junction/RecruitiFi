@@ -6,8 +6,8 @@ const card = 'rounded-xl border border-slate-200 bg-white p-4'
 const input = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm'
 const button = 'rounded-lg bg-espoo px-4 py-2 text-sm font-semibold text-white enabled:cursor-pointer enabled:hover:bg-blue-900 disabled:opacity-50'
 
-export function EmployerTasks({ name, score, mutual, candidateId, companyId, store }: {
-  name: string; score?: number; mutual: boolean; candidateId: number; companyId: number; store: SwipeStore
+export function EmployerTasks({ name, score, scoreLabel, mutual, candidateId, companyId, store }: {
+  name: string; score?: number; scoreLabel?:string; mutual: boolean; candidateId: number; companyId: number; store: SwipeStore
 }) {
   const [assigning, setAssigning] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -45,9 +45,10 @@ export function EmployerTasks({ name, score, mutual, candidateId, companyId, sto
   }
 
   return <article className={card}>
+    {store.taskError && <p role="alert" className="mb-2 text-sm text-red-800">{store.taskError}</p>}
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="font-bold">{name}</h3>
-      {score !== undefined && <span className="rounded-lg bg-mist px-2 py-1 text-sm font-semibold text-espoo">{Number(score.toFixed(1))}% fit</span>}
+      {(scoreLabel || score !== undefined) && <span className="rounded-lg bg-mist px-2 py-1 text-sm font-semibold text-espoo">{scoreLabel ?? `${Number(score!.toFixed(1))}% fit`}</span>}
     </div>
     {mutual && <p className="mt-1 text-sm font-semibold text-emerald-800">Mutual match</p>}
     {tasks.length > 0 && <ul className="mt-4 space-y-3">
@@ -124,6 +125,7 @@ export function CandidateUpdates({ candidateId, companies, store }: {
 
   return <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="updates-heading">
     <h2 id="updates-heading" className="text-xl font-bold">Hiring updates</h2>
+    {store.taskError && <p role="alert" className="mt-2 text-sm text-red-800">{store.taskError}</p>}
     {store.error && <p role="alert" className="mt-3 text-sm text-red-800">{store.error} <button type="button" className="cursor-pointer underline" onClick={store.retry}>Retry</button></p>}
     {!store.ready && !store.error && <p role="status" className="mt-3 text-sm">Loading updates…</p>}
     {store.ready && companiesWithUpdates.length === 0 && <p className="mt-3 text-sm text-slate-600">Employer decisions and assigned tasks will appear here.</p>}
