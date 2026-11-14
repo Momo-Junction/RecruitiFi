@@ -5,7 +5,7 @@ import { EmployerWorkspace } from './EmployerWorkspace'
 import { OrganizerWorkspace } from './OrganizerWorkspace'
 import { useSwipes } from './useSwipes'
 import { useDemoNavigation, type DemoAccount, type DemoRole } from './demoNavigation'
-import { loginAccount } from './accountSession'
+import { loginAccount, loadAccountConfiguration } from './accountSession'
 
 const roles = [
   { id: 'talent', label: 'Talent View' },
@@ -109,17 +109,15 @@ export function App() {
   const [role, setRole] = useState<DemoRole | null>(null)
   const [choice, setChoice] = useState('')
   const [privateLogin, setPrivateLogin] = useState<boolean>()
+  const [passwordFree,setPasswordFree]=useState(false)
   const [verified, setVerified] = useState('')
   const [password, setPassword] = useState('')
   const [signingIn, setSigningIn] = useState(false)
   useEffect(() => {
     const controller = new AbortController()
-    fetch('/api/evidence-session/config', { credentials: 'same-origin', cache: 'no-store', signal: controller.signal }).then(async response => {
-      if (!response.ok) throw new Error('Account verification configuration is unavailable.')
-      const data = await response.json()
-      if (typeof data.verified_login_required !== 'boolean') throw new Error('Invalid account verification configuration.')
-      if (!controller.signal.aborted) setPrivateLogin(data.verified_login_required)
-    }).catch(cause => { if (!controller.signal.aborted) setError(cause.message) })
+    loadAccountConfiguration(controller.signal).then(config=>{
+      if(!controller.signal.aborted){setPrivateLogin(config.sessionRequired);setPasswordFree(config.passwordFree)}
+    }).catch(cause=>{if(!controller.signal.aborted)setError(cause.message)})
     return () => controller.abort()
   }, [attempt])
   useEffect(() => {
@@ -172,7 +170,7 @@ export function App() {
             if (!chosen?.available || privateLogin === undefined || signingIn) return
             setSigningIn(true); setError('')
             try {
-              if (privateLogin) { await loginAccount(chosen.demo_account_id, password); setVerified(chosen.demo_account_id) }
+              if (privateLogin) { await loginAccount(chosen.demo_account_id, passwordFree ? undefined : password); setVerified(chosen.demo_account_id) }
               selectAccount(chosen)
             } catch (cause) { setError((cause as Error).message) }
             finally { setPassword(''); setSigningIn(false) }
@@ -184,13 +182,13 @@ export function App() {
               </select>
             </label>
             {choices.filter((item) => !item.available).map((item) => <p key={item.demo_account_id} role="alert" className="mt-2 text-sm text-red-800">{item.error}</p>)}
-            {privateLogin && <label className="mt-3 grid gap-2 text-sm font-semibold">Account password<input required type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2" /></label>}
+            {privateLogin && !passwordFree && <label className="mt-3 grid gap-2 text-sm font-semibold">Account password<input required type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2" /></label>}
             <button type="submit" disabled={!chosen?.available || privateLogin === undefined || signingIn} className="mt-4 rounded-lg bg-espoo px-4 py-3 font-semibold text-white enabled:cursor-pointer disabled:opacity-50">{signingIn ? 'Signing in…' : 'Enter Dashboard'}</button>
           </form>}
         </>}
         {!catalog && !error && !account && <p role="status" className="mt-4">Loading demo accounts…</p>}
         {error && <p role="alert" className="mt-4">{error} <button type="button" className="underline" onClick={() => setAttempt((value) => value + 1)}>Retry</button></p>}
-        <p className="mt-6 text-xs text-slate-500">{privateLogin ? 'Server-verified synthetic demo accounts. AI access reuses this sign-in.' : 'Password-free demo navigation only — no secure account authorization.'} Use synthetic information only.</p>
+        <p className="mt-6 text-xs text-slate-500">{passwordFree ? 'Public shared demo: anyone can select these accounts and modify shared demo data. This is not private authentication.' : privateLogin ? 'Server-verified synthetic demo accounts. AI access reuses this sign-in.' : 'Password-free demo navigation only — no secure account authorization.'} Use synthetic information only.</p>
       </section>
     </main>
   </div>
