@@ -324,5 +324,5 @@ def healthz():
 
 # Container builds supply these assets; local Vite development is unchanged.
 _frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
-if (_frontend_dist / "index.html").is_file():
+if os.environ.get("TALENTMATCH_SERVE_FRONTEND") == "1" and (_frontend_dist / "index.html").is_file():
     app.mount("/", StaticFiles(directory=_frontend_dist, html=True), name="frontend")
