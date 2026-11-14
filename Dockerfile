@@ -26,6 +26,7 @@ COPY backend/requirements.txt /app/backend/requirements.txt
 COPY deploy/rahti/requirements.lock /app/backend/requirements.lock
 RUN python -m pip install --no-cache-dir -r /app/backend/requirements.txt -c /app/backend/requirements.lock
 COPY backend/*.py backend/schema.sql /app/backend/
+COPY backend/evidence/*.py /app/backend/evidence/
 COPY --from=frontend-build /build/frontend/dist /app/frontend/dist
 # Source and packages only need to be readable. Writes belong to PVC or /tmp.
 # A PVC hides these image permissions: the SCC/CSI fsGroup must grant PVC access.
