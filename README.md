@@ -25,6 +25,82 @@ pnpm dev
 
 Open the [event directory](http://localhost:5173/) or [interactive API docs](http://127.0.0.1:8000/docs). Run `pnpm build` from `frontend` to type-check and build the app.
 
+## Local AI analysis with one account sign-in
+
+For the AI-enabled local demo, stop the plain Uvicorn command above and run:
+
+```sh
+python experiments/run_local_evidence.py
+```
+
+Use a Python environment with the existing backend requirements installed. The
+launcher also requires the prepared model artifacts and existing virtual
+environment under `experiments/local_model/.venv`; it does not download or install
+anything. Keep the Vite frontend running on port 5173. The API binds to loopback
+port 8000 and the private model to loopback port 8081.
+
+The command prints the path to a private `account-passwords.txt` file outside
+Git. It configures distinct local passwords for `talent-001` through
+`talent-015`, `talent-ai-001`, and `employer-001`. These passwords are local only;
+existing Rahti credentials are unchanged. The other Employer aliases are not
+configured by this local launcher. Organizer remains a preview.
+
+Refresh http://localhost:5173/ and sign in through the main account screen.
+Previously selected accounts must sign in again. Select your own supported
+materials, confirm permission, then click **Analyze My Profile**. No second AI
+login is needed. Employer sharing is off by default. Use fabricated evidence
+for testing; the launcher never submits existing documents automatically.
+
+The profile analyzer accepts resources from all seven sections. Text-based CV,
+project, certificate and research PDFs provide document text. Other links use
+the saved title/description; PNG/JPEG uploads use descriptions without OCR.
+Each selected resource receives part of the bounded six-fragment text budget.
+Skills remain self-declared: edits invalidate cached AI results and the dashboard
+refreshes their status; re-run analysis to update evidence associations. Adding
+a skill without supporting evidence does not increase AI coverage scores.
+
+The local AI launcher enables `TALENTMATCH_AI_FETCH_PUBLIC_PROFILES=1`.
+This opt-in server setting enables public-profile retrieval after the existing
+owner consent; it does not change authentication or Employer sharing.
+
+GitHub profile URLs retrieve the public bio and a bounded sample of up to three
+recent non-fork repository descriptions/languages using only `api.github.com`.
+Repository URLs still use the existing bounded file retriever. Metadata is not
+proof of authorship or proficiency. No GitHub token, clone or code execution is
+used. Profile and repository retrieval share the existing 30-second, 26-request,
+2 MB response and 100 KB decoded-text budget, with at most three sampled
+repositories total. No returned URLs or redirects are followed.
+
+LinkedIn /in/profile URLs attempt one HTTPS request to `www.linkedin.com`, with
+public DNS/address pinning, certificate verification, a 10-second limit and
+256 KiB HTML ceiling. Only publicly returned professional text is extracted;
+no JavaScript, cookies, login, CAPTCHA solving or auth-wall bypass is used.
+A public browser profile may still block server requests. Rate limits, login
+walls, redirects and unreadable pages are reported explicitly. Blocked content
+is never embedded, and other readable evidence can still complete analysis.
+LinkedIn's official Profile API requires approved access; this app does not
+pretend that public visibility grants that API authorization.
+
+Other websites remain metadata-only. Saved descriptions are an optional
+fallback, and can be updated with **Add / edit analysis description**. If only
+blocked/empty links are selected, analysis fails with the retrieval reason,
+without fabricated results. Retrieved profiles are held in memory only; stored
+results contain short attributed excerpts, not full pages. Public-profile
+retrieval is disabled by default outside the local launcher; enabling it in a
+hosted environment also requires permitted HTTPS egress to these fixed hosts.
+
+PDF evidence must contain readable text, be unencrypted,
+and contain at most ten pages. Images/scanned PDFs have no OCR support. Validation,
+model outages, rate limits and interrupted jobs are shown as errors without
+invented scores. Job cards show the result; open a job's explanation to inspect
+attributed excerpts. Completed/failed analyses stop polling. If evidence or job
+requirements change, review the selection and analyze again explicitly.
+
+The launcher reuses the existing local `backend/talentmatch.sqlite3` and does
+not reset or reseed it. It keeps credentials between restarts in the printed
+private directory; Ctrl+C stops both services. This remains demo-account
+verification, not production identity authentication.
+
 ## Deploy the shared demo
 
 1. In the [Render dashboard](https://dashboard.render.com/), choose **New → Blueprint**, connect `Momo-Junction/RecruitiFi`, and select `main`.
