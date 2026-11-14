@@ -188,7 +188,7 @@ CREATE TABLE IF NOT EXISTS ai_material_consents (
     consented_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
-CREATE TABLE IF NOT EXISTS hiring_tasks (
+CREATE TABLE IF NOT EXISTS hiring_task_assignments (
     id INTEGER PRIMARY KEY,
     company_id INTEGER NOT NULL REFERENCES companies(id),
     candidate_id INTEGER NOT NULL REFERENCES candidates(id),
