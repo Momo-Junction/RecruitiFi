@@ -29,6 +29,14 @@ CREATE TABLE IF NOT EXISTS candidates (
     skills TEXT NOT NULL CHECK (json_type(skills) = 'array')
 );
 
+CREATE TABLE IF NOT EXISTS swipe_decisions (
+    candidate_id INTEGER NOT NULL REFERENCES candidates(id),
+    company_id INTEGER NOT NULL REFERENCES companies(id),
+    actor TEXT NOT NULL CHECK (actor IN ('talent', 'employer')),
+    decision TEXT NOT NULL CHECK (decision IN ('like', 'pass')),
+    PRIMARY KEY (candidate_id, company_id, actor)
+);
+
 CREATE TABLE IF NOT EXISTS match_audit (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     calculated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
