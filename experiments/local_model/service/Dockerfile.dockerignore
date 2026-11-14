@@ -1,0 +1,12 @@
+**
+!service/
+!service/*.py
+!service/requirements.txt
+!requirements-linux.txt
+!requirements.lock
+!amd64_model_manifest.json
+!models/
+!models/all-MiniLM-L6-v2/
+!models/all-MiniLM-L6-v2/tokenizer.json
+!models/all-MiniLM-L6-v2/onnx/
+!models/all-MiniLM-L6-v2/onnx/model_quint8_avx2.onnx
