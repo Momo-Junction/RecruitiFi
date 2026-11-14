@@ -23,8 +23,10 @@ def docker(*args, **kwargs):
     return subprocess.check_output(['docker', *args], text=True, stderr=subprocess.STDOUT, **kwargs).strip()
 
 
-def request(base, path, body=None, method=None, authorization=None):
+def request(base, path, body=None, method=None, authorization=None, demo_account=None):
     headers = {'Authorization': authorization} if authorization else {}
+    if demo_account is not None:
+        headers['X-Recruitifi-Demo-Account'] = demo_account
     req = urllib.request.Request(base + path, data=body, method=method, headers=headers)
     with urllib.request.urlopen(req, timeout=10) as response:
         return response.read(), response.headers
@@ -79,11 +81,26 @@ try:
         else:
             raise AssertionError('Unexpected React fallback for ' + path)
     assert json.loads(request(base, '/api/companies')[0]) == [], 'Startup must not seed.'
+    empty_catalog = json.loads(request(base, '/api/demo/accounts')[0])
+    assert len(empty_catalog['accounts']) == 21
+    assert not empty_catalog['accounts'][0]['available'], 'Missing profiles must not silently remap or seed.'
     assert docker('exec', name, 'python', '-c', 'import os; print(os.getuid())') == '1000620000'
     docker('exec', name, 'python', '-m', 'backend.seed')  # only the new, isolated test DB
     docker('exec', name, 'python', '-c', 'from backend.database import connect; c=connect(); db=c.__enter__(); assert db.execute("PRAGMA journal_mode=WAL").fetchone()[0]=="wal"; c.__exit__(None,None,None)')
     candidates = json.loads(request(base, '/api/candidates')[0])
     candidate_id = candidates[0]['id']
+    catalog = json.loads(request(base, '/api/demo/accounts')[0])
+    assert all(account['available'] for account in catalog['accounts'])
+    assert (catalog['candidate_count'], catalog['company_count']) == (15, 8)
+    assert [account['company_id'] for account in catalog['accounts'] if account['role'] == 'employer'] == [1, 2, 3, 4, 5]
+    assert [item['id'] for item in json.loads(request(base, '/api/candidates', demo_account='talent-001')[0])] == [402]
+    assert json.loads(request(base, '/api/candidates', demo_account='employer-001')[0]) == []
+    try:
+        request(base, '/api/candidates/402/skills', b'[]', 'PUT', demo_account='talent-002')
+    except urllib.error.HTTPError as error:
+        assert error.code == 403
+    else:
+        raise AssertionError('Cross-account demo profile write was accepted')
     query = urllib.parse.urlencode({'category': 'cv', 'title': 'Synthetic deployment test', 'filename': 'synthetic.pdf'})
     document = b'%PDF-1.4\nSynthetic deployment test only\n%%EOF\n'
     saved = json.loads(request(base, f'/api/candidates/{candidate_id}/documents?{query}', document, 'POST')[0])
@@ -107,7 +124,8 @@ try:
     restored_inbox = json.loads(request(base, inbox_path)[0])
     assert restored_inbox['entries'][0]['id'] == notification_id and restored_inbox['unread_count'] == 0
     assert json.loads(request(base, '/api/notifications/employer/1')[0])['unread_count'] == 1
-    assert request(base, download)[0] == document
+    assert request(base, download, demo_account='talent-001')[0] == document
+    assert json.loads(request(base, '/api/demo/accounts')[0]) == catalog
     assert len(json.loads(request(base, '/api/candidates')[0])) == len(candidates)
     # Write after UID change: test group permissions, not just read persistence.
     req = urllib.request.Request(base + f'/api/candidates/{candidate_id}/skills', data=b'[]', method='PUT', headers={'Content-Type': 'application/json'})
@@ -118,7 +136,7 @@ try:
     # Reuse the same synthetic event in hosted mode: authentication must protect
     # frontend, assets, APIs, documentation and persisted document downloads.
     name, base = start('-hosted', 1000620002, hosted=True)
-    for path in ['/', '/talent', '/employer', '/organizer', script, '/api/companies', '/api/candidates', download, inbox_path, '/docs', '/openapi.json']:
+    for path in ['/', '/talent', '/employer', '/organizer', script, '/api/companies', '/api/candidates', download, inbox_path, '/api/demo/accounts', '/docs', '/openapi.json']:
         for header in [None, 'Basic !!!', 'Basic ' + base64.b64encode(('demo:' + secrets.token_urlsafe(24)).encode()).decode(),
                        'Basic ' + base64.b64encode(('other:' + DEMO_PASSWORD).encode()).decode()]:
             try:
@@ -153,7 +171,8 @@ try:
     assert docker('inspect', '-f', '{{.State.ExitCode}}', name) == '0'
     name, base = start('-public', 1000620004, hosted=True, public=True)
     assert b'<div id="root">' in request(base, '/')[0]
-    assert request(base, download)[0] == document
+    assert request(base, download, demo_account='talent-001')[0] == document
+    assert json.loads(request(base, '/api/demo/accounts')[0]) == catalog
     assert len(json.loads(request(base, '/api/candidates')[0])) == len(candidates)
     public_request = urllib.request.Request(base + f'/api/candidates/{candidate_id}/skills', data=b'[]', method='PUT', headers={'Content-Type': 'application/json'})
     with urllib.request.urlopen(public_request) as response:
@@ -171,7 +190,7 @@ try:
                                  '-e', 'TALENTMATCH_HOSTED_DEMO=1', *env_args, IMAGE],
                                 env={**os.environ, 'TALENTMATCH_DEMO_PASSWORD': secrets.token_urlsafe(24)}, capture_output=True, text=True)
         assert result.returncode != 0 and expected in result.stderr, result.stderr
-    print('PASS: amd64, arbitrary UIDs, read-only rootfs, health, frontend, API, SQLite location, graceful stop, upload persistence, changed-UID writes, root/password guards, hosted startup, and frontend/API/download authentication.')
+    print('PASS: amd64, arbitrary UIDs, read-only rootfs, health, frontend, API, SQLite location, graceful stop, upload persistence, changed-UID writes, root/password guards, hosted startup, demo account mapping/isolation, and frontend/API/download authentication.')
     print('NOT VERIFIED: Rahti SCC admission, CSI fsGroup/SELinux, actual PVC and Route. Hosted mode tested locally; no Rahti deployment performed.')
 finally:
     for name in containers:
