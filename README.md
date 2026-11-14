@@ -147,3 +147,51 @@ and TypeScript/production validation. The existing container checks additionally
 test deep links in hosted mode. Rebuild the image and update the existing Deployment
 using [the Rahti runbook](deploy/rahti/README.md#local-verification-and-later-safe-update).
 Keep the existing PVC; do not reseed the deployed event or recreate its storage.
+
+## Interest indicators and notifications
+
+Incoming Talent likes show **Interested** on the matching Employer's candidate
+cards, including the queue and saved likes. They do not create Employer interest
+notifications. Employer likes create an interest notification for that Talent.
+When both current likes exist, each side receives **It's a Match!**; the earlier
+Talent interest alert is superseded. Compatibility scores and Organizer eligibility
+are unchanged: a mutual like is interest, not automatic meeting eligibility.
+
+The bell belongs to the selected candidate persona or company, not just the demo
+role. It shows active notifications, timestamps and unread counts, with individual
+Mark read controls. Active dashboards poll every 12 seconds and refresh immediately
+after local swipes, undo or read actions. Switching identities remounts the inbox;
+old requests are aborted. These frontend demo identities do not provide secure
+per-user authorization. Everyone with shared demo access can select other personas;
+use synthetic information only.
+
+Startup adds the `notifications` table and indexes using repeatable CREATE IF NOT
+EXISTS statements. Existing candidates, companies, skills, swipes and document
+BLOBs are not reset. Existing likes are backfilled on startup; their notification
+timestamp is the backfill time because legacy swipes have no timestamp. Active
+read/unread state is preserved across subsequent restarts.
+
+Each pair has at most one row per recipient/type. Repeated active likes preserve
+notification ID, timestamp and read state. Withdrawal or supersession marks rows
+inactive and removes them from active inboxes. Renewed interest reactivates the
+same row with a new timestamp and unread state. Stored history is bounded to the
+last activation per pair/recipient/type, not a full chronological activity log.
+Swipe writes/undo and notification reconciliation share one SQLite transaction;
+concurrent writers serialize with BEGIN IMMEDIATE. No new external service is used.
+
+API additions:
+
+- `GET /api/notifications/{recipient}/{identity_id}` returns active `entries` and
+  `unread_count`; recipient is `talent` (candidate ID) or `employer` (company ID).
+- `PUT /api/notifications/{recipient}/{identity_id}/{notification_id}/read` marks
+  an active scoped notification read and returns the refreshed inbox. Wrong
+  identity or inactive IDs return 404.
+- `PUT /api/swipes` retains its decision fields and adds `mutual_match` to the
+  response; `GET /api/swipes` remains the persisted decision list for badges.
+- Existing swipe DELETE also returns the remaining derived `mutual_match` state.
+
+Run backend tests with `backend/.venv/bin/python -m unittest discover -s backend
+-t . -p 'test_*.py' -v`, and `npm test && npm run build` in frontend. The container
+checks also verify notification/read persistence across recreation alongside BLOB
+persistence. See the existing Rahti runbook for backup and a single-image update;
+never reseed or delete the PVC to install this additive migration.
