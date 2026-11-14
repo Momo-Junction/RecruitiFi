@@ -34,11 +34,11 @@ def settings():
         operator, approved = configuration()
         key = os.environ.get('TALENTMATCH_AI_SESSION_SECRET', '')
         accounts = json.loads(os.environ.get('TALENTMATCH_AI_DEMO_ACCOUNTS', '{}'))
-        if len(key) < 32 or not isinstance(accounts, dict) or not 1 <= len(accounts) <= 20:
+        if len(key) < 32 or not isinstance(accounts, dict) or not 1 <= len(accounts) <= len(BY_ID):
             raise ValueError()
         for identity, password in accounts.items():
             account = BY_ID.get(identity, {})
-            permitted = account.get('candidate_id') in approved if account.get('role') == 'talent' else account.get('role') == 'employer' and str(account.get('company_id')) in employer_grants(approved)
+            permitted = account.get('candidate_id') in approved if account.get('role') == 'talent' else account.get('role') in ('employer','organizer')
             if not permitted or not isinstance(password, str) or not 12 <= len(password) <= 128:
                 raise ValueError()
         if len(set(accounts.values())) != len(accounts) or key == operator or any(password in (key, operator) for password in accounts.values()):
