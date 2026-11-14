@@ -69,6 +69,15 @@ try:
     javascript, _ = request(base, script)
     assert b'127.0.0.1:8000' not in javascript and b'localhost:8000' not in javascript
     assert docker('exec', name, 'python', '-c', 'import os; print(os.environ["TALENTMATCH_SERVE_FRONTEND"])') == '1'
+    for path in ['/talent', '/employer', '/organizer']:
+        assert b'<div id="root">' in request(base, path)[0]
+    for path in ['/api/not-a-real-endpoint', '/assets/missing.js', '/unknown-route']:
+        try:
+            request(base, path)
+        except urllib.error.HTTPError as error:
+            assert error.code == 404
+        else:
+            raise AssertionError('Unexpected React fallback for ' + path)
     assert json.loads(request(base, '/api/companies')[0]) == [], 'Startup must not seed.'
     assert docker('exec', name, 'python', '-c', 'import os; print(os.getuid())') == '1000620000'
     docker('exec', name, 'python', '-m', 'backend.seed')  # only the new, isolated test DB
@@ -96,7 +105,7 @@ try:
     # Reuse the same synthetic event in hosted mode: authentication must protect
     # frontend, assets, APIs, documentation and persisted document downloads.
     name, base = start('-hosted', 1000620002, hosted=True)
-    for path in ['/', script, '/api/companies', '/api/candidates', download, '/docs', '/openapi.json']:
+    for path in ['/', '/talent', '/employer', '/organizer', script, '/api/companies', '/api/candidates', download, '/docs', '/openapi.json']:
         for header in [None, 'Basic !!!', 'Basic ' + base64.b64encode(('demo:' + secrets.token_urlsafe(24)).encode()).decode(),
                        'Basic ' + base64.b64encode(('other:' + DEMO_PASSWORD).encode()).decode()]:
             try:
