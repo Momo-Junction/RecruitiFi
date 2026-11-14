@@ -55,10 +55,17 @@ try:
     assert arch['Config'].get('User', '') == '', 'Image must leave identity to OpenShift.'
     docker('volume', 'create', VOLUME)
     name, base = start('-first', 1000620000)
-    assert b'<div id="root">' in request(base, '/')[0]
+    html, _ = request(base, '/')
+    assert b'<div id="root">' in html
+    import re
+    script = re.search(rb'<script[^>]+src="([^"]+)"', html).group(1).decode()
+    javascript, _ = request(base, script)
+    assert b'127.0.0.1:8000' not in javascript and b'localhost:8000' not in javascript
+    assert docker('exec', name, 'python', '-c', 'import os; print(os.environ["TALENTMATCH_SERVE_FRONTEND"])') == '1'
     assert json.loads(request(base, '/api/companies')[0]) == [], 'Startup must not seed.'
     assert docker('exec', name, 'python', '-c', 'import os; print(os.getuid())') == '1000620000'
     docker('exec', name, 'python', '-m', 'backend.seed')  # only the new, isolated test DB
+    docker('exec', name, 'python', '-c', 'from backend.database import connect; c=connect(); db=c.__enter__(); assert db.execute("PRAGMA journal_mode=WAL").fetchone()[0]=="wal"; c.__exit__(None,None,None)')
     candidates = json.loads(request(base, '/api/candidates')[0])
     candidate_id = candidates[0]['id']
     query = urllib.parse.urlencode({'category': 'cv', 'title': 'Synthetic deployment test', 'filename': 'synthetic.pdf'})
