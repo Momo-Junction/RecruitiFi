@@ -91,3 +91,99 @@ CREATE TABLE IF NOT EXISTS job_openings (
 );
 CREATE INDEX IF NOT EXISTS jobs_company ON job_openings(company_id, active);
 CREATE INDEX IF NOT EXISTS jobs_industry ON job_openings(industry, active);
+
+-- AI evidence storage: additive/idempotent; never promotes candidate skills.
+CREATE TABLE IF NOT EXISTS evidence_analysis_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    material_id INTEGER NOT NULL REFERENCES profile_materials(id) ON DELETE CASCADE,
+    analysis_kind TEXT NOT NULL CHECK (analysis_kind IN ('project', 'github')),
+    model_id TEXT NOT NULL CHECK (length(model_id) BETWEEN 1 AND 200),
+    model_revision TEXT NOT NULL CHECK (length(model_revision) BETWEEN 1 AND 128),
+    status TEXT NOT NULL CHECK (status IN ('complete','limited','partial','failed','no_evidence','no_skills')),
+    extraction_status TEXT CHECK (length(extraction_status) BETWEEN 1 AND 64),
+    retrieval_status TEXT CHECK (length(retrieval_status) BETWEEN 1 AND 64),
+    semantic_status TEXT CHECK (length(semantic_status) BETWEEN 1 AND 64),
+    error_code TEXT CHECK (length(error_code) BETWEEN 1 AND 64),
+    coverage_limited INTEGER NOT NULL CHECK (coverage_limited IN (0,1)),
+    review_status TEXT NOT NULL DEFAULT 'unreviewed' CHECK (review_status IN ('unreviewed','accepted','rejected')),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX IF NOT EXISTS evidence_runs_material ON evidence_analysis_runs(material_id, id);
+
+CREATE TABLE IF NOT EXISTS evidence_sources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL REFERENCES evidence_analysis_runs(id) ON DELETE CASCADE,
+    source_type TEXT NOT NULL CHECK (length(source_type) BETWEEN 1 AND 64),
+    evidence_field TEXT NOT NULL CHECK (length(evidence_field) BETWEEN 1 AND 512),
+    repository_url TEXT CHECK (length(repository_url) <= 256),
+    file_path TEXT CHECK (length(file_path) <= 1024),
+    tree_sha TEXT CHECK (length(tree_sha) = 40),
+    blob_sha TEXT CHECK (length(blob_sha) = 40),
+    source_reference TEXT CHECK (length(source_reference) <= 512),
+    excerpt TEXT NOT NULL DEFAULT '' CHECK (length(excerpt) <= 160),
+    excerpt_start INTEGER CHECK (excerpt_start >= 0),
+    excerpt_end INTEGER CHECK (excerpt_end >= excerpt_start),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    UNIQUE (id, run_id),
+    CHECK ((excerpt_start IS NULL AND excerpt_end IS NULL AND excerpt='')
+        OR (excerpt_start IS NOT NULL AND excerpt_end IS NOT NULL AND excerpt_end-excerpt_start=length(excerpt)))
+);
+CREATE INDEX IF NOT EXISTS evidence_sources_run ON evidence_sources(run_id);
+
+CREATE TABLE IF NOT EXISTS evidence_skill_findings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id INTEGER NOT NULL REFERENCES evidence_analysis_runs(id) ON DELETE CASCADE,
+    source_id INTEGER NOT NULL,
+    skill_id INTEGER NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+    skill_name TEXT NOT NULL CHECK (length(skill_name) BETWEEN 1 AND 400),
+    finding_kind TEXT NOT NULL CHECK (finding_kind IN ('semantic','observation')),
+    similarity_score REAL,
+    observation_kind TEXT CHECK (length(observation_kind) <= 64),
+    observed_value TEXT CHECK (length(observed_value) <= 214),
+    review_status TEXT NOT NULL DEFAULT 'unreviewed' CHECK (review_status IN ('unreviewed','accepted','rejected')),
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    FOREIGN KEY (source_id, run_id) REFERENCES evidence_sources(id, run_id) ON DELETE CASCADE,
+    CHECK ((finding_kind='semantic' AND similarity_score IS NOT NULL AND similarity_score BETWEEN -1 AND 1
+            AND observation_kind IS NULL AND observed_value IS NULL)
+        OR (finding_kind='observation' AND similarity_score IS NULL AND observation_kind IS NOT NULL AND observed_value IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS evidence_findings_source ON evidence_skill_findings(source_id, run_id);
+CREATE INDEX IF NOT EXISTS evidence_findings_run ON evidence_skill_findings(run_id);
+CREATE INDEX IF NOT EXISTS evidence_findings_skill ON evidence_skill_findings(skill_id);
+
+-- Operational job state only; active rows retain admission after source deletion.
+CREATE TABLE IF NOT EXISTS evidence_analysis_jobs (
+    id TEXT PRIMARY KEY,
+    candidate_id INTEGER REFERENCES candidates(id) ON DELETE SET NULL,
+    material_id INTEGER REFERENCES profile_materials(id) ON DELETE SET NULL,
+    run_id INTEGER REFERENCES evidence_analysis_runs(id) ON DELETE SET NULL,
+    top_k INTEGER NOT NULL CHECK (top_k BETWEEN 1 AND 5),
+    status TEXT NOT NULL CHECK (status IN ('queued','running','completed','failed','timed_out','cancelled','interrupted')),
+    error_code TEXT,
+    lease_deadline REAL NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS evidence_one_active_job ON evidence_analysis_jobs((1)) WHERE status IN ('queued','running');
+CREATE UNIQUE INDEX IF NOT EXISTS evidence_one_candidate_job ON evidence_analysis_jobs(candidate_id) WHERE status IN ('queued','running');
+CREATE INDEX IF NOT EXISTS evidence_jobs_candidate ON evidence_analysis_jobs(candidate_id,created_at);
+
+-- Cached model-derived job coverage; source analysis deletion invalidates results.
+CREATE TABLE IF NOT EXISTS ai_profile_matches (
+    candidate_id INTEGER PRIMARY KEY REFERENCES candidates(id) ON DELETE CASCADE,
+    run_id INTEGER NOT NULL REFERENCES evidence_analysis_runs(id) ON DELETE CASCADE,
+    fingerprint TEXT NOT NULL,
+    result TEXT NOT NULL CHECK(json_valid(result)),
+    updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+CREATE TABLE IF NOT EXISTS ai_material_consents (
+    material_id INTEGER PRIMARY KEY REFERENCES profile_materials(id) ON DELETE CASCADE,
+    candidate_id INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    digest TEXT NOT NULL,
+    share_company_id INTEGER REFERENCES companies(id),
+    consented_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
