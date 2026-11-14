@@ -14,7 +14,7 @@ class DemoAuthTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.password = secrets.token_urlsafe(24) + 'å'
         self.environment = patch.dict(os.environ, {
-            'TALENTMATCH_HOSTED_DEMO': '1', 'TALENTMATCH_DEMO_PASSWORD': self.password,
+            'TALENTMATCH_HOSTED_DEMO': '1', 'TALENTMATCH_DEMO_AUTH_ENABLED': 'true', 'TALENTMATCH_DEMO_PASSWORD': self.password,
         })
         self.environment.start()
         self.addCleanup(self.environment.stop)
@@ -123,3 +123,22 @@ class DemoAuthTests(unittest.IsolatedAsyncioTestCase):
                 async with lifespan(app):
                     pass
             connect.assert_not_called()
+
+    async def test_explicit_false_allows_hosted_access_without_password(self):
+        os.environ['TALENTMATCH_DEMO_AUTH_ENABLED'] = 'false'
+        os.environ.pop('TALENTMATCH_DEMO_PASSWORD', None)
+        self.app = DemoAuthMiddleware(self.app.app)
+        for path in ['/', '/api/candidates', '/api/candidates/402/documents/1']:
+            self.assertEqual((await self.request(path))[0]['status'], 200)
+
+    def test_auth_defaults_to_enabled(self):
+        os.environ.pop('TALENTMATCH_DEMO_AUTH_ENABLED', None)
+        os.environ.pop('TALENTMATCH_DEMO_PASSWORD', None)
+        with self.assertRaisesRegex(RuntimeError, 'PASSWORD is required'):
+            hosted_password()
+
+    def test_invalid_auth_flag_fails_closed(self):
+        for value in ['', '0', 'no', 'typo']:
+            os.environ['TALENTMATCH_DEMO_AUTH_ENABLED'] = value
+            with self.assertRaisesRegex(RuntimeError, 'AUTH_ENABLED must be true or false'):
+                hosted_password()
