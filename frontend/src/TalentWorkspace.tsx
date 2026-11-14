@@ -93,7 +93,7 @@ export function TalentWorkspace({ candidates, companies, skills, onSaved, swipeS
   const [attempt, setAttempt] = useState(0)
   const [result, setResult] = useState<{ candidateId: number; profile: CandidateProfile; companies: Company[]; attempt: number; matches: Match[]; failed: boolean }>()
   const candidate = candidates.find(({ id }) => id === candidateId)
-  const profile = savedProfile?.candidate.id === candidateId ? savedProfile.candidate : undefined
+  const profile = savedProfile && savedProfile.candidate.id === candidateId ? savedProfile.candidate : undefined
   useEffect(() => {
     if (candidateId === undefined) return
     const controller = new AbortController()
