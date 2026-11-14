@@ -1,0 +1,14 @@
+{
+  "macos": "26.6.2",
+  "macos_exit_code": 0,
+  "chip": "",
+  "chip_exit_code": 1,
+  "prior_native_mac_benchmark_hardware": {
+    "os": "macOS-26.6.2-arm64-arm-64bit",
+    "architecture": "arm64",
+    "cpu": "Apple M1",
+    "logical_cpus": 8,
+    "physical_memory_bytes": 17179869184
+  },
+  "note": "Current sandbox denied the optional sysctl chip-name probe; daemon/image architecture is independently recorded by Docker. Prior native Mac metadata identifies this host as Apple M1."
+}
