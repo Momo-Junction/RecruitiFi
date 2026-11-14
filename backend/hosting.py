@@ -8,7 +8,6 @@ from fastapi import FastAPI, Request
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
-from .database import connect
 from .seed import seed
 
 DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
@@ -20,10 +19,7 @@ def initialize_demo():
         return
     if not os.getenv("TALENTMATCH_DEMO_PASSWORD"):
         raise RuntimeError("Set TALENTMATCH_DEMO_PASSWORD for the hosted demo.")
-    with connect() as connection:
-        empty = connection.execute("SELECT 1 FROM candidates LIMIT 1").fetchone() is None
-    if empty:
-        seed()
+    seed(add_only=True)
 
 
 def configure_hosting(app: FastAPI):

@@ -1,25 +1,30 @@
+import argparse
 import json
 import re
 
 if __package__:
     from .database import DB_PATH, SCHEMA_PATH, connect
-    from .seed_data import CANDIDATES, COMPANIES, SKILLS
+    from .seed_data import CANDIDATES, COMPANIES, SKILLS, practice_candidates, practice_companies
 else:
     from database import DB_PATH, SCHEMA_PATH, connect
-    from seed_data import CANDIDATES, COMPANIES, SKILLS
+    from seed_data import CANDIDATES, COMPANIES, SKILLS, practice_candidates, practice_companies
 
 
-def upsert(connection, table, columns, rows):
+def seed_rows(connection, table, columns, rows, *, add_only):
     placeholders = ", ".join("?" for _ in columns)
     assignments = ", ".join(f"{column} = excluded.{column}" for column in columns[1:])
+    conflict = "DO NOTHING" if add_only else f"DO UPDATE SET {assignments}"
     connection.executemany(
         f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders}) "
-        f"ON CONFLICT(id) DO UPDATE SET {assignments}",
+        f"ON CONFLICT(id) {conflict}",
         rows,
     )
 
 
-def seed():
+def seed(*, add_only=False):
+    companies = [(index, *company) for index, company in enumerate(COMPANIES, start=1)]
+    companies.extend(practice_companies())
+    candidates = [*CANDIDATES, *practice_candidates()]
     skill_ids = {name: index for index, (name, _) in enumerate(SKILLS, start=1)}
 
     def weighted_skills(weights, total):
@@ -31,7 +36,7 @@ def seed():
 
     with connect() as connection:
         connection.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
-        upsert(
+        seed_rows(
             connection,
             "skills",
             ("id", "esco_uri", "name", "category"),
@@ -44,8 +49,9 @@ def seed():
                 )
                 for name, category in SKILLS
             ],
+            add_only=add_only,
         )
-        upsert(
+        seed_rows(
             connection,
             "companies",
             (
@@ -53,11 +59,12 @@ def seed():
                 "working_language", "min_match_threshold", "must_have_skills", "nice_to_have_skills",
             ),
             [
-                (index, *details, weighted_skills(required, 70), weighted_skills(preferred, 20))
-                for index, (*details, required, preferred) in enumerate(COMPANIES, start=1)
+                (company_id, *details, weighted_skills(required, 70), weighted_skills(preferred, 20))
+                for company_id, *details, required, preferred in companies
             ],
+            add_only=add_only,
         )
-        upsert(
+        seed_rows(
             connection,
             "candidates",
             (
@@ -74,13 +81,16 @@ def seed():
                         for skill in skills
                     ]),
                 )
-                for code, name, cv, portfolio, languages, sponsorship, evidence in CANDIDATES
+                for code, name, cv, portfolio, languages, sponsorship, evidence in candidates
             ],
+            add_only=add_only,
         )
 
-    print(f"Seeded {len(SKILLS)} skills, {len(COMPANIES)} companies and {len(CANDIDATES)} candidates.")
+    print(f"Demo catalog ready with {len(SKILLS)} skills, {len(companies)} employers and {len(candidates)} candidates.")
     print(f"SQLite database: {DB_PATH.resolve()}")
 
 
 if __name__ == "__main__":
-    seed()
+    parser = argparse.ArgumentParser(description="Seed the fictional TalentMatch directory.")
+    parser.add_argument("--add-only", action="store_true", help="Keep existing profiles and add missing demo records.")
+    seed(add_only=parser.parse_args().add_only)
