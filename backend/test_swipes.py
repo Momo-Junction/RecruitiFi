@@ -57,6 +57,22 @@ class SwipeApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.request('DELETE', '/api/swipes/talent/402/1'))[0], 200)
         self.assertEqual((await self.request('GET'))[1], [employer])
 
+    async def test_saved_profile_routes_load_and_persist_materials(self):
+        _, candidates = await self.request('GET', '/api/candidates')
+        for candidate in candidates:
+            status, saved = await self.request('GET', f"/api/candidates/{candidate['id']}/profile")
+            self.assertEqual(status, 200)
+            self.assertEqual(saved['candidate']['id'], candidate['id'])
+            self.assertEqual(saved['materials'], [])
+        status, saved = await self.request('POST', '/api/candidates/402/links', {
+            'category': 'project', 'title': 'Portfolio', 'url': 'https://example.com/portfolio', 'skill_id': 1,
+        })
+        self.assertEqual(status, 200)
+        self.assertTrue(saved['candidate']['has_portfolio'])
+        self.assertEqual(len(saved['materials']), 1)
+        self.assertEqual(await self.request('GET', '/api/candidates/402/profile'), (200, saved))
+        self.assertEqual((await self.request('GET', '/api/candidates/99999/profile'))[0], 404)
+
     async def test_reseeding_preserves_decisions(self):
         await self.request('PUT', value=self.vote)
         with redirect_stdout(io.StringIO()):
