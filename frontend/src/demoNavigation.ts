@@ -2,58 +2,76 @@ import { useEffect, useState } from 'react'
 
 export const demoRoles = ['talent', 'employer', 'organizer'] as const
 export type DemoRole = typeof demoRoles[number]
-export const demoRoleKey = 'recruitifi.demoRole'
-export function isDemoRole(value: unknown): value is DemoRole {
-  return demoRoles.includes(value as DemoRole)
+export type DemoAccount = { demo_account_id: string; display_name: string; available: boolean; error?: string } & (
+  { role: 'talent'; candidate_id: number } | { role: 'employer'; company_id: number } | { role: 'organizer' }
+)
+export const demoAccountKey = 'recruitifi.demoAccount'
+let memoryAccount: DemoAccount | null = null
+export function isDemoAccount(value: unknown): value is DemoAccount {
+  if (!value || typeof value !== 'object') return false
+  const account = value as Record<string, unknown>
+  return typeof account.demo_account_id === 'string' && typeof account.display_name === 'string' && account.available === true && (
+    account.role === 'organizer' || (account.role === 'talent' && Number.isSafeInteger(account.candidate_id) && Number(account.candidate_id) > 0)
+    || (account.role === 'employer' && Number.isSafeInteger(account.company_id) && Number(account.company_id) > 0)
+  )
 }
 
-// These are demo navigation rules only; they do not authorize API access.
-export function resolveDemoRoute(path: string, selected: DemoRole | null) {
-  if (path === '/') return { role: null, path: '/' }
-  if (selected && demoRoles.some((role) => path === `/${role}`)) {
-    return { role: selected, path: `/${selected}` }
+// One shared demo session; caller-selected public IDs do not authorize API access.
+export function readDemoAccount(browser: Pick<Window, 'sessionStorage'> | undefined = typeof window === 'undefined' ? undefined : window): DemoAccount | null {
+  if (!browser) return null
+  let value: string | null
+  try { value = browser.sessionStorage.getItem(demoAccountKey) }
+  catch { return memoryAccount }
+  try {
+    const stored: unknown = JSON.parse(value ?? 'null')
+    return isDemoAccount(stored) ? stored : null
+  } catch { return null }
+}
+export function resolveDemoRoute(path: string, selected: DemoAccount | null) {
+  if (path !== '/' && selected && demoRoles.some((role) => path === `/${role}`)) {
+    return { account: selected, path: `/${selected.role}` }
   }
-  return { role: null, path: '/' }
+  return { account: null, path: '/' }
 }
-
 export function createDemoNavigation(browser: Pick<Window, 'location' | 'history' | 'sessionStorage'>) {
-  let memoryRole: DemoRole | null = null
-  function selected() {
-    try {
-      const value = browser.sessionStorage.getItem(demoRoleKey)
-      return isDemoRole(value) ? value : null
-    } catch { return memoryRole }
-  }
   function current() {
-    return resolveDemoRoute(browser.location.pathname, selected())
+    return resolveDemoRoute(browser.location.pathname, readDemoAccount(browser))
   }
   function sync() {
     const route = current()
     if (browser.location.pathname !== route.path) browser.history.replaceState(null, '', route.path)
-    return route.role
+    return route.account
   }
-  function select(role: DemoRole | null) {
-    memoryRole = role
+  function select(account: DemoAccount | null) {
+    if (account && !isDemoAccount(account)) throw new Error('Choose an available demo account.')
+    memoryAccount = account
     try {
-      if (role) browser.sessionStorage.setItem(demoRoleKey, role)
-      else browser.sessionStorage.removeItem(demoRoleKey)
-    } catch { /* Navigation still works when browser storage is unavailable. */ }
-    const path = role ? `/${role}` : '/'
+      browser.sessionStorage.removeItem('recruitifi.demoRole')
+      if (account) browser.sessionStorage.setItem(demoAccountKey, JSON.stringify(account))
+      else browser.sessionStorage.removeItem(demoAccountKey)
+    } catch { /* In-memory selection works; refresh needs browser storage. */ }
+    const path = account ? `/${account.role}` : '/'
     if (browser.location.pathname !== path) browser.history.pushState(null, '', path)
-    return role
+    return account
   }
   return { current, sync, select }
 }
-
 export function useDemoNavigation() {
   const [navigation] = useState(() => typeof window === 'undefined' ? null : createDemoNavigation(window))
-  const [role, setRole] = useState<DemoRole | null>(() => navigation?.current().role ?? null)
+  const [account, setAccount] = useState<DemoAccount | null>(() => navigation?.current().account ?? null)
   useEffect(() => {
     if (!navigation) return
-    const sync = () => setRole(navigation.sync())
+    const sync = () => setAccount(navigation.sync())
     sync()
     window.addEventListener('popstate', sync)
     return () => window.removeEventListener('popstate', sync)
   }, [navigation])
-  return { role, selectRole: (next: DemoRole | null) => setRole(navigation?.select(next) ?? null) }
+  return { account, selectAccount: (next: DemoAccount | null) => setAccount(navigation?.select(next) ?? null) }
+}
+
+export function requireDemoOwner(role: 'talent' | 'employer', identityId: number) {
+  const account = readDemoAccount()
+  if (account && (account.role !== role || (account.role === 'talent' ? account.candidate_id : account.role === 'employer' ? account.company_id : undefined) !== identityId)) {
+    throw new Error('This operation belongs to a different demo account. Log out to switch accounts.')
+  }
 }
