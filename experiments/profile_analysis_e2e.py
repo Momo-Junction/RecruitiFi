@@ -27,6 +27,7 @@ from backend.database import SCHEMA_PATH
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--expect-model-unavailable',action='store_true')
+    parser.add_argument('--password-free-demo',action='store_true')
     args=parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='recruitifi-analysis-e2e-') as directory:
         database=Path(directory)/'synthetic.sqlite3'
@@ -53,7 +54,7 @@ def main():
         with socket.socket() as s:s.bind(('127.0.0.1',0));port=s.getsockname()[1]
         password=secrets.token_urlsafe(20)
         env=os.environ.copy()
-        env.update(TALENTMATCH_DB=str(database),TALENTMATCH_HOSTED_DEMO='0',TALENTMATCH_SERVE_FRONTEND='0',TALENTMATCH_PUBLIC_ORIGIN='',TALENTMATCH_AI_CONSENTED_MODE='1',TALENTMATCH_AI_CANDIDATES='402',TALENTMATCH_AI_SYNTHETIC_DEMO='0',TALENTMATCH_AI_JOB_MATCHING='1',TALENTMATCH_VERIFIED_DEMO_LOGIN='1',TALENTMATCH_AI_DEMO_TOKEN=secrets.token_urlsafe(40),TALENTMATCH_AI_SESSION_SECRET=secrets.token_urlsafe(40),TALENTMATCH_AI_DEMO_ACCOUNTS=json.dumps({'talent-001':password}),TALENTMATCH_AI_EMPLOYER_ACCESS='{}',TALENTMATCH_AI_FETCH_PUBLIC_PROFILES='0')
+        env.update(TALENTMATCH_DB=str(database),TALENTMATCH_HOSTED_DEMO='0',TALENTMATCH_SERVE_FRONTEND='0',TALENTMATCH_PUBLIC_ORIGIN='',TALENTMATCH_AI_CONSENTED_MODE='1',TALENTMATCH_AI_CANDIDATES='402',TALENTMATCH_AI_SYNTHETIC_DEMO='0',TALENTMATCH_AI_JOB_MATCHING='1',TALENTMATCH_VERIFIED_DEMO_LOGIN='1',TALENTMATCH_AI_DEMO_TOKEN=secrets.token_urlsafe(40),TALENTMATCH_AI_SESSION_SECRET=secrets.token_urlsafe(40),TALENTMATCH_AI_DEMO_ACCOUNTS=json.dumps({'talent-001':password}),TALENTMATCH_AI_EMPLOYER_ACCESS='{}',TALENTMATCH_AI_FETCH_PUBLIC_PROFILES='0',TALENTMATCH_PASSWORD_FREE_DEMO='true' if args.password_free_demo else 'false')
         base=f'http://127.0.0.1:{port}';jar=http.cookiejar.CookieJar()
         opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),urllib.request.HTTPCookieProcessor(jar))
         def request(path,body=None,csrf=None,method=None):
@@ -72,7 +73,7 @@ def main():
                     except OSError:pass
                     time.sleep(.1)
                 else:raise RuntimeError('Synthetic API startup failed')
-                status,identity=request('/api/evidence-session',{'account':'talent-001','password':password})
+                status,identity=request('/api/evidence-session',{'account':'talent-001','password':'' if args.password_free_demo else password})
                 assert status==200
                 csrf=identity['csrf'];summary=[]
                 for material_id in (1,2,4,5,6,8,9,12,3):
