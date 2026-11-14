@@ -1,0 +1,8 @@
+onnx-int8: short batch=1 tokens=13 median=1.826 ms peak=114.7 MiB
+onnx-int8: short batch=3 tokens=13 median=4.869 ms peak=114.7 MiB
+onnx-int8: short batch=16 tokens=13 median=23.139 ms peak=118.1 MiB
+onnx-int8: short batch=32 tokens=13 median=45.709 ms peak=118.8 MiB
+onnx-int8: max_256_tokens batch=1 tokens=256 median=36.717 ms peak=119.4 MiB
+onnx-int8: max_256_tokens batch=3 tokens=256 median=107.450 ms peak=155.2 MiB
+onnx-int8: max_256_tokens batch=16 tokens=256 median=584.704 ms peak=351.5 MiB
+onnx-int8: max_256_tokens batch=32 tokens=256 median=1193.999 ms peak=590.1 MiB
