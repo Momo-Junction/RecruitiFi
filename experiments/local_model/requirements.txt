@@ -1,0 +1,6 @@
+# Isolated macOS arm64 experiment. Full resolved versions are in requirements.lock.
+torch==2.15.0
+transformers==5.23.0
+onnxruntime==1.32.0
+numpy==2.5.4
+psutil==7.2.2
