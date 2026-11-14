@@ -22,6 +22,7 @@ class SyntheticAIDemoTests(unittest.IsolatedAsyncioTestCase):
         patches=[patch.object(database,'DB_PATH',Path(directory.name)/'test.sqlite3'),
             patch.dict('os.environ',{
                 'TALENTMATCH_AI_SYNTHETIC_DEMO':'1',
+                'TALENTMATCH_AI_FETCH_PUBLIC_PROFILES':'0',
                 'TALENTMATCH_AI_SYNTHETIC_CANDIDATES':'900001',
                 'TALENTMATCH_AI_DEMO_TOKEN':'synthetic-only-test-operator-token-123456',
                 'TALENTMATCH_AI_SESSION_SECRET':'synthetic-only-test-signing-secret-123456',
