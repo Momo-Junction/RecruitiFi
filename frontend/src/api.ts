@@ -75,6 +75,7 @@ export interface ImprovementHint {
 }
 
 export interface Match {
+  ai?: import('./useAiMatches').AiMatch
   company_id: number
   total_score: number
   min_match_threshold: number
@@ -113,6 +114,7 @@ export interface ProfileMaterial {
   skill_id: number | null
   url: string | null
   filename: string | null
+  content_type: string | null
 }
 export interface SavedProfile {
   candidate: Candidate
