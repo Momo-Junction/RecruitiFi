@@ -92,8 +92,11 @@ the built frontend and API on port 8080, with SQLite at `/var/data/talentmatch.s
 Production frontend builds use same-origin `/api` requests; Vite development keeps
 the localhost API default. `/healthz` reports process health after startup.
 
-**Hosted deployment is blocked:** this checkout has no shared-demo authentication.
-Per the deployment scope, authentication was not added. The container refuses
-`TALENTMATCH_HOSTED_DEMO=1` even if a password is provided; do not expose the
-unauthenticated app publicly or disable this guard on Rahti. No Render config
-was present to modify. Existing local development behavior is preserved.
+Hosted mode (`TALENTMATCH_HOSTED_DEMO=1`) protects the frontend, assets, API,
+documentation and downloads with HTTP Basic authentication: username `demo`,
+password from `TALENTMATCH_DEMO_PASSWORD` (a Kubernetes Secret on Rahti). Missing
+password configuration stops startup; invalid request credentials return 401.
+`/healthz` remains public for probes. Use HTTPS and synthetic information only;
+shared access is not a candidate account/ownership system. Local development is
+unchanged when hosted mode is unset or 0. Actual Rahti SCC, PVC and HTTPS operation
+still require a later authorized cluster test. No Render config was present to modify.
