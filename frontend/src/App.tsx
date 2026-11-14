@@ -15,8 +15,8 @@ const roles = [
 const card = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6'
 
 export function App() {
-  const swipeStore = useSwipes()
   const { role, selectRole } = useDemoNavigation()
+  const swipeStore = useSwipes(role === 'talent' || role === 'employer')
   const [directory, setDirectory] = useState<Awaited<ReturnType<typeof loadDirectory>>>()
   const [error, setError] = useState('')
   const [attempt, setAttempt] = useState(0)
