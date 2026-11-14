@@ -281,3 +281,133 @@ Run backend tests with `backend/.venv/bin/python -m unittest discover -s backend
 checks also verify notification/read persistence across recreation alongside BLOB
 persistence. See the existing Rahti runbook for backup and a single-image update;
 never reseed or delete the PVC to install this additive migration.
+
+## Jobs, industries and job-specific rankings
+
+The existing Talent discovery now shows shared **job openings** with multi-select
+industry chips, **Clear Filters**, and an honest no-results state. Choices use OR
+filtering, apply only to active jobs, and persist per candidate in sessionStorage
+for the current browser session. They never change the logged-in account. The
+Employer dashboard adds **My Job Openings** with only that company's openings;
+selecting another job clears stale rankings and requests that job's scored queue.
+The existing profile editors, discovery cards, Interested badges and bells are reused.
+
+Canonical industry definitions (provided by the backend):
+
+| ID | Exact display label |
+| --- | --- |
+| it | IT |
+| business_services | Business (Services) |
+| logistics | Logistics |
+| health_sector | Health Sector |
+| restaurant | Restaurant |
+| cleaning | Cleaning |
+| engineering | Engineering |
+
+`job_openings` is an additive SQLite table: stable integer `id`, existing
+`company_id` foreign key, title, canonical industry, description, weighted JSON
+`must_have_skills`/`nice_to_have_skills`, and `active`. Company/industry indexes and
+category/JSON/boolean constraints are created with `IF NOT EXISTS`. It uses the
+same `TALENTMATCH_DB` and needs no new volume or environment variable.
+
+**Startup creates the table but does not seed jobs.** After a backup, explicitly
+initialize only the new job records in an existing event:
+
+```sh
+backend/.venv/bin/python -m backend.seed_jobs
+```
+
+Use the same `TALENTMATCH_DB` as the application. On a fresh local event, run the
+existing base seed first, then this new initializer, then start Uvicorn/Vite as
+above. **Never run `backend.seed` to upgrade a populated event**: it upserts base
+profiles. `backend.seed_jobs` requires existing companies 1–5 and the existing
+catalog; it never creates candidates/companies or assigns candidate skills.
+
+The explicit initializer inserts these **12 fictional hackathon openings**, not
+real vacancies. Employers 1–5 are the existing demo-account companies; all eight
+companies remain intact and participate in company discovery/Organizer matching.
+
+| Job ID | Company ID / Employer | Opening | Industry |
+| --- | --- | --- | --- |
+| 1001 | 1 · Kide Quantum Labs | Quantum Software Developer | IT |
+| 1002 | 1 · Kide Quantum Labs | Quantum Hardware Engineer | Engineering |
+| 1003 | 1 · Kide Quantum Labs | Research Data Analyst | IT |
+| 2001 | 2 · Kallio Grid Energy | Energy Systems Engineer | Engineering |
+| 2002 | 2 · Kallio Grid Energy | Demo Equipment Logistics Coordinator | Logistics |
+| 3001 | 3 · Siltava Health Systems | Clinical Data Coordinator | Health Sector |
+| 3002 | 3 · Siltava Health Systems | Demo Facilities Cleaning Assistant | Cleaning |
+| 4001 | 4 · Ranta Cloud Works | Cloud Platform Engineer | IT |
+| 4002 | 4 · Ranta Cloud Works | Service Delivery Coordinator | Business (Services) |
+| 5001 | 5 · Luoto Digital Studio | Accessible Product Designer | IT |
+| 5002 | 5 · Luoto Digital Studio | Demo Event Catering Assistant | Restaurant |
+| 5003 | 5 · Luoto Digital Studio | Client Services Coordinator | Business (Services) |
+
+See `backend/seed_jobs.py` for exact required/preferred weights. These sum to the
+existing 70/20 budgets. Existing skills are resolved by name. Six missing domain
+skills are inserted only if absent: Logistics Coordination, Inventory Control,
+Food Hygiene, Food Service, Commercial Cleaning, and Cleaning Safety. A fresh
+40-skill catalog becomes 46 skills. **No candidate claims these automatically**;
+low/zero required-skill scores for new sectors are expected until synthetic
+profiles are deliberately edited or supported with synthetic evidence.
+
+The initializer is transactional and insert-only. Re-running it inserts zero
+existing job IDs and preserves edited titles, weights, industries and inactive
+state. Reserved IDs belonging to another company, missing companies, or missing
+required existing skills cause a clear failure without overwriting event data.
+Names resolve to actual catalog IDs; identical base data yields identical jobs.
+There is no new job editing/creation interface or write API in this MVP.
+
+`JobOpening` implements the engine's existing `CompanyRequirements` inputs.
+Job scoring calls the unchanged `calculate_match` with the opening's skill groups
+and the **saved candidate profile**, including evidence derived from materials.
+Language, relocation support and threshold are inherited live from the existing
+company; they are not loosened. Ranking preserves the existing dealbreaker-first,
+score-descending, candidate-ID tie-break. Talent scores use the same adapter.
+For example, seeded Aino (402) leads job 1001, while Iryna (438) leads job 1002.
+Changing a job genuinely changes scoring inputs, not just the title.
+
+**Likes/pass decisions remain company-level.** All openings of a company share
+that Talent/Company pair's decisions, Interested state and mutual notifications.
+Swiping one job therefore removes that company's other openings from the unswiped
+Talent deck; **All jobs** still lists its active jobs. Saved likes still name the
+company. Changing filters or selected job never inserts/deletes a swipe or match.
+Job fit does not change Organizer suggestions or meeting eligibility: the existing
+company meeting endpoint and explicit human review remain in use. Job-ranked
+queue entries require that review before accepting a company-level conversation.
+The Company Quick Role Builder still edits the company profile; job skill groups
+remain separate snapshots, and are not overwritten by company edits.
+
+| New API | Result |
+| --- | --- |
+| `GET /api/jobs/industries` | Seven canonical IDs/labels |
+| `GET /api/jobs` | All active job details, including inherited company requirements |
+| `GET /api/jobs?industry=it&industry=engineering` | OR filter; unknown IDs return 422 |
+| `GET /api/jobs?company_id=1` | Active public openings for one existing company |
+| `GET /api/jobs/{job_id}` | Job details; unknown ID returns 404 |
+| `GET /api/companies/{company_id}/jobs` | That Employer's own openings, including inactive jobs |
+| `GET /api/jobs/{job_id}/matches` | Anonymous candidate ranks for that opening |
+| `GET /api/candidates/{candidate_id}/job-matches` | That Talent's scores for all active jobs |
+
+Existing API contracts are unchanged. New owned routes validate demo identity and
+reject mismatched account IDs when the demo header is supplied. This remains
+mock-account workflow separation, **not secure authentication**; public IDs and
+headerless shared API access are not confidential. Ranked discovery exposes no
+candidate names, email addresses, document metadata or document contents. Use
+synthetic data only. Hosted Basic/public mode remains unchanged.
+
+If no jobs have been explicitly initialized, Talent sees a clear empty state;
+Employer sees the existing company-level queue with an initialization notice.
+No company requirements are silently converted into fake job records.
+
+Validation:
+
+```sh
+backend/.venv/bin/python -m unittest discover -s backend -t . -p 'test_*.py' -v
+(cd frontend && npm test && VITE_API_URL='' npm run build)
+docker buildx build --platform linux/amd64 --load -t recruitifi:jobs .
+python3 -B deploy/rahti/test_container.py recruitifi:jobs
+```
+
+See [the safe Rahti update procedure](deploy/rahti/README.md#installing-industry-filters-and-job-rankings)
+for backup, additive migration, explicit job initialization and count verification.
+No deployment, commit or push is part of these local checks.
