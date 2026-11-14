@@ -36,3 +36,28 @@ test('all role aliases use the same password-verified account session',async()=>
   }finally{fetch.mock.restore()}
  }
 })
+test('password-free mode establishes a server cookie without sending a password or token',async()=>{
+ const calls=[]
+ const fetch=mock.method(globalThis,'fetch',async(path,options)=>{calls.push([path,options]);return new Response(JSON.stringify({account_id:'employer-005'}))})
+ try{
+  await loginAccount('employer-005')
+  assert.deepEqual(JSON.parse(calls[0][1].body),{account:'employer-005',password:''})
+  assert.equal(calls[0][1].credentials,'same-origin')
+  assert.equal(calls.length,2)
+ }finally{fetch.mock.restore()}
+})
+test('password-free configuration still requires a signed selection and rejects invalid flags',async()=>{
+ const {loadAccountConfiguration}=await server.ssrLoadModule('/src/accountSession.ts')
+ for(const [value,expected] of [
+  [{verified_login_required:true,password_free_demo:true},{sessionRequired:true,passwordFree:true}],
+  [{verified_login_required:true},{sessionRequired:true,passwordFree:false}],
+  [{verified_login_required:false,password_free_demo:true},null],
+  [{verified_login_required:true,password_free_demo:'true'},null],
+ ]){
+  const fetch=mock.method(globalThis,'fetch',async()=>new Response(JSON.stringify(value)))
+  try{
+   if(expected)assert.deepEqual(await loadAccountConfiguration(),expected)
+   else await assert.rejects(loadAccountConfiguration(),/Invalid account/)
+  }finally{fetch.mock.restore()}
+ }
+})
