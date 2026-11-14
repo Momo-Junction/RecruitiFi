@@ -1,0 +1,68 @@
+[
+  {
+    "command": [
+      "python3",
+      "-m",
+      "py_compile",
+      "experiments/local_model/benchmark_amd64.py",
+      "experiments/local_model/run_amd64.py",
+      "experiments/local_model/summarize_amd64.py",
+      "experiments/local_model/prepare_amd64.py"
+    ],
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "python3",
+      "experiments/local_model/benchmark_amd64.py",
+      "--batch-size",
+      "4",
+      "--max-tokens",
+      "128"
+    ],
+    "exit_code": 2,
+    "expected_exit_code": 2,
+    "stdout": "",
+    "stderr": "usage: benchmark_amd64.py [-h] --batch-size {1,3} --max-tokens {128,256}\nbenchmark_amd64.py: error: argument --batch-size: invalid choice: '4' (choose from '1', '3')\n"
+  },
+  {
+    "command": [
+      "python3",
+      "experiments/local_model/benchmark_amd64.py",
+      "--batch-size",
+      "1",
+      "--max-tokens",
+      "512"
+    ],
+    "exit_code": 2,
+    "expected_exit_code": 2,
+    "stdout": "",
+    "stderr": "usage: benchmark_amd64.py [-h] --batch-size {1,3} --max-tokens {128,256}\nbenchmark_amd64.py: error: argument --max-tokens: invalid choice: '512' (choose from '128', '256')\n"
+  },
+  {
+    "command": [
+      "git",
+      "check-ignore",
+      "experiments/local_model/models/all-MiniLM-L6-v2/onnx/model_quint8_avx2.onnx",
+      "experiments/local_model/.venv/bin/python"
+    ],
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "stdout": "experiments/local_model/models/all-MiniLM-L6-v2/onnx/model_quint8_avx2.onnx\nexperiments/local_model/.venv/bin/python\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "exit_code": 0,
+    "expected_exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+]
