@@ -7,6 +7,13 @@ LanguageLevel = Literal["A1", "A2", "B1", "B2", "C1", "C2"]
 PositiveId = Annotated[int, Field(gt=0)]
 
 
+class SwipeDecision(BaseModel):
+    candidate_id: PositiveId
+    company_id: PositiveId
+    actor: Literal['talent', 'employer']
+    decision: Literal['like', 'pass']
+
+
 class Skill(BaseModel):
     id: int
     esco_uri: str
