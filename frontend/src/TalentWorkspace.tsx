@@ -76,15 +76,15 @@ function MatchBreakdown({ match, busy, onClose }: {
   )
 }
 
-export function TalentWorkspace({ candidates, companies, skills, onSaved, swipeStore }: {
+export function TalentWorkspace({ candidateId, candidates, companies, skills, onSaved, swipeStore }: {
   swipeStore: SwipeStore
+  candidateId: number
   candidates: Candidate[]
   companies: Company[]
   skills: Skill[]
   onSaved: (candidate: Candidate) => void
 }) {
   const [view, setView] = useState<'swipe' | 'list'>('swipe')
-  const [candidateId, setCandidateId] = useState(candidates[0]?.id)
   const [savedProfile, setSavedProfile] = useState<SavedProfile>()
   const [profileError, setProfileError] = useState('')
   const [profileBusy, setProfileBusy] = useState(false)
@@ -132,7 +132,7 @@ export function TalentWorkspace({ candidates, companies, skills, onSaved, swipeS
     return () => controller.abort()
   }, [profile, candidateId, companies, attempt])
 
-  if (!candidate) return <p>No candidate profiles available.</p>
+  if (!candidate) return <p>Your demo candidate profile is unavailable. Log out and contact the demo operator.</p>
   if (!profile || !savedProfile) return <div role="status">{profileError || 'Loading your saved profile…'}{profileError && <button type="button" className="ml-3 underline" onClick={() => setProfileAttempt((value) => value + 1)}>Retry</button>}</div>
 
   const skillNames = new Map(skills.map(({ id, name }) => [id, name]))
@@ -177,16 +177,7 @@ export function TalentWorkspace({ candidates, companies, skills, onSaved, swipeS
       <section aria-labelledby="profile-heading" className={`${panel} min-w-0 p-5 sm:p-6`}>
         <div className="flex items-center justify-between gap-3"><h2 id="profile-heading" className="text-xl font-bold tracking-tight">Talent profile</h2><NotificationBell key={candidate.id} recipient="talent" identityId={candidate.id} /></div>
         <p className="mt-1 text-sm leading-relaxed text-slate-600">Build a profile around your experience, projects and qualifications.</p>
-        <label className="mt-5 grid gap-1.5 text-sm font-semibold">
-          Candidate persona
-          <select disabled={profileBusy} className={select} value={candidate.id} onChange={(event) => {
-            setCandidateId(Number(event.target.value))
-            setSkillToAdd('')
-            setOpenCompany(null)
-          }}>
-            {candidates.map(({ id, full_name, anonymous_code }) => <option key={id} value={id}>{full_name} · {anonymous_code}</option>)}
-          </select>
-        </label>
+        <p className="mt-5 text-sm font-semibold">{candidate.full_name} · {candidate.anonymous_code}</p>
         <p className="mt-3 text-sm text-slate-600">{Object.entries(profile.languages).map(([name, level]) => `${name} ${level}`).join(' · ')}</p>
         {profile.needs_visa_sponsorship && <p className="mt-1 text-sm text-slate-600">Needs visa sponsorship</p>}
         <ProfileMaterials key={candidate.id} profile={savedProfile} skills={skills} onSaved={acceptSaved} />
