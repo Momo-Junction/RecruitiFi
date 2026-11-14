@@ -374,3 +374,16 @@ class ConsentedProfileTests(ProfileMatchingTests):
             self.assertTrue(profile_matching.public_profile_enabled())
             os.environ['TALENTMATCH_AI_FETCH_PUBLIC_PROFILES']='0'
             self.assertFalse(profile_matching.public_profile_enabled())
+
+    async def test_fifty_more_jobs_fit_the_existing_expanded_catalog_budget(self):
+        owner=await self.login('talent-001','fabricated-owner-test-password')
+        with database.connect() as c:
+            for i in range(1000,1110):
+                c.execute("INSERT INTO job_openings VALUES(?,1,'Synthetic extra job','it','Fictional only','[{\"skill_id\":1,\"weight\":70}]','[]',1)",(i,))
+        self.assertEqual((await self.consent(owner))[0],200)
+        self.assertEqual((await self.request('POST',self.path+'/analyze',headers=owner))[0],202)
+        await asyncio.to_thread(self.manager.future.result,5)
+        data=(await self.request('GET',self.path,headers=owner))[1]
+        self.assertEqual(data['status'],'completed')
+        self.assertEqual(len(data['matches']),112)
+        self.assertLess(profile_matching.EmbeddingClient.return_value.embed.call_count,10)
