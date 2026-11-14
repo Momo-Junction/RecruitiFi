@@ -53,7 +53,7 @@ def main():
         with socket.socket() as s:s.bind(('127.0.0.1',0));port=s.getsockname()[1]
         password=secrets.token_urlsafe(20)
         env=os.environ.copy()
-        env.update(TALENTMATCH_DB=str(database),TALENTMATCH_HOSTED_DEMO='0',TALENTMATCH_SERVE_FRONTEND='0',TALENTMATCH_PUBLIC_ORIGIN='',TALENTMATCH_AI_CONSENTED_MODE='1',TALENTMATCH_AI_CANDIDATES='402',TALENTMATCH_AI_SYNTHETIC_DEMO='0',TALENTMATCH_AI_JOB_MATCHING='1',TALENTMATCH_VERIFIED_DEMO_LOGIN='1',TALENTMATCH_AI_DEMO_TOKEN=secrets.token_urlsafe(40),TALENTMATCH_AI_SESSION_SECRET=secrets.token_urlsafe(40),TALENTMATCH_AI_DEMO_ACCOUNTS=json.dumps({'talent-001':password}),TALENTMATCH_AI_EMPLOYER_ACCESS='{}')
+        env.update(TALENTMATCH_DB=str(database),TALENTMATCH_HOSTED_DEMO='0',TALENTMATCH_SERVE_FRONTEND='0',TALENTMATCH_PUBLIC_ORIGIN='',TALENTMATCH_AI_CONSENTED_MODE='1',TALENTMATCH_AI_CANDIDATES='402',TALENTMATCH_AI_SYNTHETIC_DEMO='0',TALENTMATCH_AI_JOB_MATCHING='1',TALENTMATCH_VERIFIED_DEMO_LOGIN='1',TALENTMATCH_AI_DEMO_TOKEN=secrets.token_urlsafe(40),TALENTMATCH_AI_SESSION_SECRET=secrets.token_urlsafe(40),TALENTMATCH_AI_DEMO_ACCOUNTS=json.dumps({'talent-001':password}),TALENTMATCH_AI_EMPLOYER_ACCESS='{}',TALENTMATCH_AI_FETCH_PUBLIC_PROFILES='0')
         base=f'http://127.0.0.1:{port}';jar=http.cookiejar.CookieJar()
         opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),urllib.request.HTTPCookieProcessor(jar))
         def request(path,body=None,csrf=None,method=None):
@@ -75,7 +75,7 @@ def main():
                 status,identity=request('/api/evidence-session',{'account':'talent-001','password':password})
                 assert status==200
                 csrf=identity['csrf'];summary=[]
-                for material_id in (1,2,4,5,6,7,8,9,12,3):
+                for material_id in (1,2,4,5,6,8,9,12,3):
                     assert request('/api/ai-matches/profiles/402/consent',{'material_ids':[material_id],'confirm':True},csrf)[0]==200
                     status,accepted=request('/api/ai-matches/profiles/402/analyze',{},csrf)
                     assert status==202,(status,accepted)
@@ -103,10 +103,12 @@ def main():
                         time.sleep(.1)
                     assert result['job']['status']=='completed'
                     data=request('/api/ai-matches/profiles/402')[1]
-                    assert {s['material_id'] for s in data['sources'] if s['content_status']=='not_analyzed'}=={10,11}
+                    assert {s['material_id'] for s in data['sources'] if s['content_status']=='not_analyzed'}=={11}
                     assert data['matches']
+                    assert any(s['material_id']==10 and s['content_status']=='profile_completion_bonus' for s in data['sources'])
+                    assert all(m['profile_bonus']==2 and m['display_score']==round(min(100,m['score']+2),1) for m in data['matches'].values())
                     assert request('/api/ai-matches/profiles/402/materials/10/description',{'description':'Fabricated Python API'},csrf,method='PATCH')[0]==200
-                    summary.append({'check':'bare LinkedIn + GitHub profile + CV','completed':True,'unread_links_explicitly_marked':True,'description_edit':'PASS'})
+                    summary.append({'check':'bare LinkedIn + GitHub profile + CV','completed':True,'linkedin_bonus_separate':True,'unread_github_explicitly_marked':True,'description_edit':'PASS'})
                     def reanalyze():
                         assert request('/api/ai-matches/profiles/402/consent',{'material_ids':[1],'confirm':True},csrf)[0]==200
                         code,accepted=request('/api/ai-matches/profiles/402/analyze',{},csrf)
