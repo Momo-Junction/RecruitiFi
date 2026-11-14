@@ -1,43 +1,29 @@
 import { useEffect, useState } from 'react'
-import { ProfileEvidence, type EvidenceLink } from './ProfileEvidence'
+import { ProfileMaterials } from './ProfileMaterials'
 import {
   simulateMatch,
+  profileRequest,
+  type SavedProfile,
   type Candidate,
   type CandidateProfile,
   type Company,
   type EvidenceTier,
-  type ImprovementHint,
   type Match,
   type Skill,
 } from './api'
 
 const evidenceLabels: Record<EvidenceTier, string> = {
-  self_declared: 'Self-Declared',
-  portfolio: 'Portfolio',
-  certificate: 'Verified Certificate',
+  self_declared: 'Listed skill',
+  portfolio: 'Work sample added',
+  certificate: 'Certificate submitted',
 }
 const panel = 'rounded-2xl border border-slate-200 bg-white shadow-sm'
 const select = 'min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm'
 const primary = 'rounded-lg bg-espoo px-4 py-2.5 text-sm font-semibold text-white enabled:cursor-pointer enabled:hover:bg-blue-900 disabled:opacity-50'
 const format = new Intl.NumberFormat('en', { maximumFractionDigits: 1 })
 
-function applyHint(profile: CandidateProfile, hint: ImprovementHint): CandidateProfile {
-  if (hint.kind === 'cv') return { ...profile, has_cv: true }
-  if (hint.kind === 'portfolio') return { ...profile, has_portfolio: true }
-  const skillId = hint.skill_id
-  if (skillId === null) return profile
-  return {
-    ...profile,
-    skills: [
-      ...profile.skills.filter((skill) => skill.skill_id !== skillId),
-      { skill_id: skillId, evidence_tier: 'certificate' },
-    ],
-  }
-}
-
-function MatchBreakdown({ match, onBoost, busy, onClose }: {
+function MatchBreakdown({ match, busy, onClose }: {
   match: Match
-  onBoost: (hint: ImprovementHint) => void
   busy: boolean
   onClose: () => void
 }) {
@@ -79,24 +65,6 @@ function MatchBreakdown({ match, onBoost, busy, onClose }: {
           </div>
         ))}
       </div>
-      <div className="mt-6 border-t border-blue-100 pt-4">
-        <h4 className="font-bold">Boost Your Match</h4>
-        {match.improvement_hints.length === 0 && <p className="mt-2 text-sm text-slate-600">All available proof points earned.</p>}
-        <ul className="mt-2 space-y-2">
-          {match.improvement_hints.map((hint) => (
-            <li key={hint.action} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-100 bg-white px-3 py-2.5 text-sm">
-              <span>{hint.action} <strong className="whitespace-nowrap text-espoo">+{format.format(hint.point_gain)} pts</strong></span>
-              <button
-                type="button"
-                aria-label={`Simulate adding proof: ${hint.action}`}
-                disabled={busy}
-                onClick={() => onBoost(hint)}
-                className="rounded-md bg-mist px-2 py-1 text-xs font-semibold text-espoo enabled:cursor-pointer enabled:hover:bg-blue-100 disabled:opacity-50"
-              >+ Simulate Adding Proof</button>
-            </li>
-          ))}
-        </ul>
-      </div>
       <button type="button" disabled={busy || !eligible || requested} onClick={() => setRequested(true)} className={`mt-5 ${primary}`}>
         Request 1:1 Meeting
       </button>
@@ -105,20 +73,34 @@ function MatchBreakdown({ match, onBoost, busy, onClose }: {
   )
 }
 
-export function TalentWorkspace({ candidates, companies, skills }: {
+export function TalentWorkspace({ candidates, companies, skills, onSaved }: {
   candidates: Candidate[]
   companies: Company[]
   skills: Skill[]
+  onSaved: (candidate: Candidate) => void
 }) {
   const [candidateId, setCandidateId] = useState(candidates[0]?.id)
-  const [drafts, setDrafts] = useState<Record<number, CandidateProfile>>({})
-  const [evidenceLinks, setEvidenceLinks] = useState<Record<number, EvidenceLink[]>>({})
+  const [savedProfile, setSavedProfile] = useState<SavedProfile>()
+  const [profileError, setProfileError] = useState('')
+  const [profileBusy, setProfileBusy] = useState(false)
+  const [profileAttempt, setProfileAttempt] = useState(0)
   const [skillToAdd, setSkillToAdd] = useState('')
   const [openCompany, setOpenCompany] = useState<number | null>(null)
   const [attempt, setAttempt] = useState(0)
   const [result, setResult] = useState<{ candidateId: number; profile: CandidateProfile; companies: Company[]; attempt: number; matches: Match[]; failed: boolean }>()
   const candidate = candidates.find(({ id }) => id === candidateId)
-  const profile = candidate && (drafts[candidate.id] ?? candidate)
+  const profile = savedProfile?.candidate.id === candidateId ? savedProfile.candidate : undefined
+  useEffect(() => {
+    if (candidateId === undefined) return
+    const controller = new AbortController()
+    setProfileError('')
+    profileRequest(candidateId, 'profile', { signal: controller.signal }).then((saved) => {
+      if (!controller.signal.aborted) setSavedProfile(saved)
+    }).catch(() => {
+      if (!controller.signal.aborted) setProfileError('Could not load your saved profile.')
+    })
+    return () => controller.abort()
+  }, [candidateId, profileAttempt])
   const current = result?.profile === profile && result?.attempt === attempt && result.companies === companies ? result : undefined
   const busy = !current
 
@@ -145,7 +127,8 @@ export function TalentWorkspace({ candidates, companies, skills }: {
     return () => controller.abort()
   }, [profile, candidateId, companies, attempt])
 
-  if (!candidate || !profile) return <p>No candidate profiles available.</p>
+  if (!candidate) return <p>No candidate profiles available.</p>
+  if (!profile || !savedProfile) return <div role="status">{profileError || 'Loading your saved profile…'}{profileError && <button type="button" className="ml-3 underline" onClick={() => setProfileAttempt((value) => value + 1)}>Retry</button>}</div>
 
   const skillNames = new Map(skills.map(({ id, name }) => [id, name]))
   const availableSkills = skills.filter(({ id }) => !profile.skills.some((skill) => skill.skill_id === id))
@@ -154,18 +137,29 @@ export function TalentWorkspace({ candidates, companies, skills }: {
   const rows = displayed?.matches.length
     ? displayed.matches.map((match) => ({ company: companyById.get(match.company_id)!, match }))
     : companies.map((company) => ({ company, match: undefined }))
-  function updateDraft(next: CandidateProfile) {
-    setDrafts((previous) => ({ ...previous, [candidate!.id]: next }))
+  function acceptSaved(saved: SavedProfile) {
+    setSavedProfile(saved)
+    onSaved(saved.candidate)
+  }
+  async function saveSkills(ids: number[]) {
+    setProfileBusy(true)
+    setProfileError('')
+    try {
+      acceptSaved(await profileRequest(candidate!.id, 'skills', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ids),
+      }))
+    } catch (cause) { setProfileError((cause as Error).message) }
+    finally { setProfileBusy(false) }
   }
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(19rem,0.8fr)_minmax(0,1.4fr)]">
       <section aria-labelledby="profile-heading" className={`${panel} min-w-0 p-5 sm:p-6`}>
         <h2 id="profile-heading" className="text-xl font-bold tracking-tight">Talent profile</h2>
-        <p className="mt-1 text-sm leading-relaxed text-slate-600">Choose a demo persona and edit their temporary profile.</p>
+        <p className="mt-1 text-sm leading-relaxed text-slate-600">Build a profile around your experience, projects and qualifications.</p>
         <label className="mt-5 grid gap-1.5 text-sm font-semibold">
           Candidate persona
-          <select className={select} value={candidate.id} onChange={(event) => {
+          <select disabled={profileBusy} className={select} value={candidate.id} onChange={(event) => {
             setCandidateId(Number(event.target.value))
             setSkillToAdd('')
             setOpenCompany(null)
@@ -175,31 +169,21 @@ export function TalentWorkspace({ candidates, companies, skills }: {
         </label>
         <p className="mt-3 text-sm text-slate-600">{Object.entries(profile.languages).map(([name, level]) => `${name} ${level}`).join(' · ')}</p>
         {profile.needs_visa_sponsorship && <p className="mt-1 text-sm text-slate-600">Needs visa sponsorship</p>}
-        <fieldset className="mt-5 space-y-2 border-t border-slate-200 pt-4">
-          <legend className="pr-2 text-sm font-bold">CV and portfolio</legend>
-          {([['has_cv', 'I have a CV'], ['has_portfolio', 'I have a portfolio']] as const).map(([field, label]) => (
-            <label key={field} className="flex cursor-pointer items-center justify-between gap-3 rounded-lg bg-mist/60 px-3 py-2.5 text-sm">
-              {label}
-              <input type="checkbox" role="switch" checked={profile[field]} onChange={(event) => updateDraft({ ...profile, [field]: event.target.checked })} className="h-4 w-4 accent-espoo" />
-            </label>
-          ))}
-        </fieldset>
-        <ProfileEvidence key={candidate.id} links={evidenceLinks[candidate.id] ?? []}
-          skills={skills.filter(({ id }) => profile.skills.some(({ skill_id }) => skill_id === id))}
-          onChange={(links) => setEvidenceLinks((previous) => ({ ...previous, [candidate.id]: links }))} />
+        <ProfileMaterials key={candidate.id} profile={savedProfile} skills={skills} onSaved={acceptSaved} />
+        {profileError && <p role="alert" className="mt-3 text-sm text-red-800">{profileError}</p>}
         <h3 className="mt-6 text-sm font-bold">Your skills</h3>
         <form className="mt-2 flex gap-2" onSubmit={(event) => {
           event.preventDefault()
           const skillId = Number(skillToAdd)
           if (!availableSkills.some(({ id }) => id === skillId)) return
-          updateDraft({ ...profile, skills: [...profile.skills, { skill_id: skillId, evidence_tier: 'self_declared' }] })
+          void saveSkills([...profile.skills.map(({ skill_id }) => skill_id), skillId])
           setSkillToAdd('')
         }}>
           <select aria-label="Skill to add" className={`${select} flex-1`} value={skillToAdd} onChange={(event) => setSkillToAdd(event.target.value)}>
             <option value="">Select a skill</option>
             {availableSkills.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
           </select>
-          <button type="submit" className={primary} disabled={!skillToAdd}>Add skill</button>
+          <button type="submit" className={primary} disabled={!skillToAdd || profileBusy}>Add skill</button>
         </form>
         <ul className="mt-3 divide-y divide-slate-100">
           {profile.skills.map(({ skill_id, evidence_tier }) => {
@@ -208,14 +192,9 @@ export function TalentWorkspace({ candidates, companies, skills }: {
               <li key={skill_id} className="py-3">
                 <div className="mb-1 flex items-baseline justify-between gap-2 text-sm">
                   <span className="font-semibold">{name}</span>
-                  <button type="button" aria-label={`Remove ${name}`} className="cursor-pointer text-xs text-slate-600 underline hover:text-espoo" onClick={() => updateDraft({ ...profile, skills: profile.skills.filter((skill) => skill.skill_id !== skill_id) })}>Remove</button>
+                  <button type="button" aria-label={`Remove ${name}`} className="cursor-pointer text-xs text-slate-600 underline hover:text-espoo" disabled={profileBusy || evidence_tier !== 'self_declared'} onClick={() => void saveSkills(profile.skills.filter((skill) => skill.skill_id !== skill_id).map(({ skill_id }) => skill_id))}>Remove</button>
                 </div>
-                <select aria-label={`How you show your ${name} skill`} className={`${select} w-full`} value={evidence_tier} onChange={(event) => {
-                  const tier = event.target.value as EvidenceTier
-                  updateDraft({ ...profile, skills: profile.skills.map((skill) => skill.skill_id === skill_id ? { ...skill, evidence_tier: tier } : skill) })
-                }}>
-                  {Object.entries(evidenceLabels).map(([tier, label]) => <option key={tier} value={tier}>{label}</option>)}
-                </select>
+                <p className="text-xs text-slate-600">{evidenceLabels[evidence_tier]}{evidence_tier !== 'self_declared' && ' · Managed through your documents and projects'}</p>
               </li>
             )
           })}
@@ -245,7 +224,7 @@ export function TalentWorkspace({ candidates, companies, skills }: {
               <span aria-hidden="true" className="text-espoo">{openCompany === company.id ? '−' : '+'}</span>
             </button>
             {openCompany === company.id && match && (
-              <MatchBreakdown key={candidate.id} match={match} busy={busy} onClose={() => setOpenCompany(null)} onBoost={(hint) => updateDraft(applyHint(profile, hint))} />
+              <MatchBreakdown key={candidate.id} match={match} busy={busy} onClose={() => setOpenCompany(null)} />
             )}
           </div>
         ))}

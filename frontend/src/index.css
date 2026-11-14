@@ -3,7 +3,7 @@
 @theme {
   --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
   --color-ink: #081b3a;
-  --color-espoo: #012169;
+  --color-espoo: #0050b5;
   --color-aqua: #9ad1d4;
   --color-mist: #eff5fb;
 }
@@ -16,21 +16,40 @@
 }
 
 .event-hero {
-  background: linear-gradient(115deg, var(--color-espoo), #103b8b);
+  background: #0050b5;
 }
 
 .event-hero::after {
   position: absolute;
-  inset: 0;
+  inset: -30% -15% -60% 58%;
   pointer-events: none;
   content: "";
-  background: repeating-radial-gradient(
-    ellipse at 100% 105%,
-    transparent 0 32px,
-    rgb(154 209 212 / 28%) 33px 34px,
-    transparent 35px 48px
-  );
-  mask-image: linear-gradient(105deg, transparent 52%, black 95%);
+  background: #dfebfb;
+  border-radius: 45% 0 0 60%;
+  transform: rotate(-12deg);
+}
+
+.hero-event-card {
+  margin-left: auto;
+  width: min(100%, 380px);
+  padding: 28px;
+  background: white;
+  border-radius: 22px 22px 65px 22px;
+  box-shadow: 0 16px 50px #002d6b26;
+}
+
+.brand-orbit {
+  display: block;
+  width: 30px;
+  height: 42px;
+  border: 2px solid #0050b5;
+  border-radius: 50%;
+  transform: rotate(30deg);
+}
+
+@media (max-width: 1023px) {
+  .hero-event-card { margin: 0; width: 100%; }
+  .event-hero::after { inset: 45% -20% -50% 35%; }
 }
 
 @media (max-width: 640px) {

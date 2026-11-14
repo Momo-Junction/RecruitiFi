@@ -27,6 +27,12 @@ Open the [event directory](http://localhost:5173/) or [interactive API docs](htt
 
 ## API and data
 
+Talent profiles have dedicated sections for CVs, projects, certificates, research, LinkedIn, GitHub and personal websites. Uploaded PDF, PNG and JPEG files (up to 10 MB each) and link metadata are stored in SQLite. Downloading a document returns it as an attachment.
+
+CV and portfolio availability are derived from saved materials. Skills linked to projects, research or submitted certificates receive the corresponding scoring tier. A submitted certificate has a reviewable attachment or URL, and its authenticity requires human review. Legacy seeded skill claims are treated as listed skills until supporting material is attached.
+
+This local hackathon demo uses a persona selector and unauthenticated API routes. Real deployment requires authenticated candidate ownership and authorized document access before handling real personal documents.
+
 | Endpoint | Returns |
 | --- | --- |
 | `GET /api/skills` | Skill catalog with names, categories, and local ESCO-style URI placeholders |

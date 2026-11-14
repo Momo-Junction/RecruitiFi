@@ -20,55 +20,6 @@ interface SkillSignal {
   evidence_tier: EvidenceTier | 'missing'
 }
 
-interface AuditSkill extends SkillSignal {
-  weight: number
-  multiplier: number
-  points: number
-}
-
-export interface AuditEntry {
-  id: number
-  calculated_at: string
-  source: 'simulation' | 'employer_queue' | 'meeting_review' | 'event_metrics'
-  company_name: string
-  candidate_code: string | null
-  inputs: {
-    scoring_version: string
-    working_language: string
-    minimum_language_level: string
-    candidate_language_level: string | null
-    has_cv: boolean
-    has_portfolio: boolean
-    needs_visa_sponsorship: boolean
-    relocation_support: boolean
-  }
-  result: Omit<Match, 'improvement_hints'> & {
-    must_have_skills: AuditSkill[]
-    nice_to_have_skills: AuditSkill[]
-  }
-}
-
-export interface EventMetrics {
-  talent_count: number
-  company_count: number
-  pair_count: number
-  average_score: number | null
-  passed_dealbreakers: number
-  below_threshold: number
-  filtered_percent: number | null
-}
-
-export async function refreshEventMetrics(signal: AbortSignal): Promise<EventMetrics> {
-  const response = await fetch(`${apiUrl}/api/audit/metrics`, { method: 'POST', signal })
-  if (!response.ok) throw new Error('Could not calculate event metrics.')
-  return response.json()
-}
-
-export function loadAuditLog(signal: AbortSignal, beforeId?: number) {
-  const cursor = beforeId === undefined ? '' : `?before_id=${beforeId}`
-  return get<{ entries: AuditEntry[]; next_before_id: number | null }>(`audit/calculations${cursor}`, signal)
-}
-
 export interface RankedMatch extends Match {
   anonymous_code: string
   must_have_skills: SkillSignal[]
@@ -135,6 +86,32 @@ export interface Match {
 
 const apiUrl = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
 
+export type MaterialCategory = 'cv' | 'project' | 'certificate' | 'research' | 'linkedin' | 'github' | 'website'
+export interface ProfileMaterial {
+  id: number
+  category: MaterialCategory
+  title: string
+  description: string
+  skill_id: number | null
+  url: string | null
+  filename: string | null
+}
+export interface SavedProfile {
+  candidate: Candidate
+  materials: ProfileMaterial[]
+}
+export function documentUrl(candidateId: number, id: number) {
+  return `${apiUrl}/api/candidates/${candidateId}/documents/${id}`
+}
+export async function profileRequest(candidateId: number, path = 'profile', options?: RequestInit): Promise<SavedProfile> {
+  const response = await fetch(`${apiUrl}/api/candidates/${candidateId}/${path}`, options)
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}))
+    throw new Error(typeof body.detail === 'string' ? body.detail : 'Could not save the profile. Check your entries and try again.')
+  }
+  return response.json()
+}
+
 async function get<T>(resource: string, signal: AbortSignal): Promise<T> {
   const response = await fetch(`${apiUrl}/api/${resource}`, { signal })
   if (!response.ok) throw new Error(`Could not load ${resource} (${response.status}).`)
@@ -175,9 +152,9 @@ export async function saveCompanyRole(companyId: number, role: CompanyRole): Pro
   return response.json()
 }
 
-export async function acceptCompanyMeeting(companyId: number, anonymousCode: string): Promise<MeetingContact> {
+export async function acceptCompanyMeeting(companyId: number, anonymousCode: string, humanReviewed = false): Promise<MeetingContact> {
   const response = await fetch(
-    `${apiUrl}/api/companies/${companyId}/matches/${encodeURIComponent(anonymousCode)}/accept`,
+    `${apiUrl}/api/companies/${companyId}/matches/${encodeURIComponent(anonymousCode)}/accept?human_reviewed=${humanReviewed}`,
     { method: 'POST' },
   )
   if (!response.ok) throw new Error(response.status === 409

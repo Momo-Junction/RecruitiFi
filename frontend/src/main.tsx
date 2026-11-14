@@ -3,13 +3,13 @@ import { createRoot } from 'react-dom/client'
 import { loadDirectory } from './api'
 import { TalentWorkspace } from './TalentWorkspace'
 import { EmployerWorkspace } from './EmployerWorkspace'
-import { OrganizerAudit } from './OrganizerAudit'
+import { OrganizerWorkspace } from './OrganizerWorkspace'
 import './index.css'
 
 const roles = [
   { id: 'talent', label: 'Talent View' },
   { id: 'employer', label: 'Employer View' },
-  { id: 'organizer', label: 'Espoo Organizer Audit' },
+  { id: 'organizer', label: 'Espoo Organizer' },
 ] as const
 
 const card = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6'
@@ -33,8 +33,8 @@ function App() {
     <div className="min-h-screen bg-[#f6f8fc] text-ink">
       <header>
         <div className="border-b border-slate-200 bg-white">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-5 py-4 sm:px-8">
-            <p className="font-bold text-espoo">City of Espoo <span className="ml-2 font-medium text-slate-500">/ TalentMatch</span></p>
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-6 sm:px-8">
+            <div className="flex items-center gap-4"><span className="brand-orbit" aria-hidden="true" /><p className="text-xl font-bold tracking-tight text-espoo">TalentMatch<span className="block text-xs font-medium tracking-wide text-slate-500">City of Espoo · Event demo</span></p></div>
             <nav aria-label="Demo roles" className="flex flex-wrap gap-1 rounded-xl bg-mist p-1">
               {roles.map(({ id, label }) => (
                 <button key={id} type="button" aria-pressed={role === id} onClick={() => setRole(id)}
@@ -46,19 +46,31 @@ function App() {
           </div>
         </div>
         <div className="event-hero relative isolate overflow-hidden text-white">
-          <div className="relative z-10 mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-10">
-            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">{roles.find(({ id }) => id === role)?.label}</h1>
+          <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-8 px-5 py-10 sm:px-8 sm:py-14 lg:grid-cols-[1.2fr_1fr]">
+            <div>
+            <p className="mb-4 text-sm font-medium text-blue-100">Working life in Espoo</p>
+            <h1 className="max-w-lg text-4xl font-medium leading-tight tracking-tight sm:text-5xl">{role === 'talent' ? 'Your next opportunity starts with a conversation.' : role === 'employer' ? 'Meet the people behind the skills.' : 'Make every introduction count.'}</h1>
             <p className="mt-4 max-w-md text-base leading-relaxed text-blue-100 sm:text-lg">
-              {role === 'talent' && 'See how your skills and evidence match Espoo employers.'}
-              {role === 'employer' && 'Set role requirements and review eligible candidate signals.'}
-              {role === 'organizer' && 'Review event metrics, scoring inputs and meeting controls.'}
+              {role === 'talent' && 'Bring your experience. Discover employers. Find something worth talking about.'}
+              {role === 'employer' && 'Describe what you need and explore people who could help you build it.'}
+              {role === 'organizer' && 'Plan introductions and see which employers need a hand.'}
             </p>
+            </div>
+            <aside className="hero-event-card">
+              <p className="text-xs font-bold uppercase tracking-widest text-espoo">Espoo TalentMatch</p>
+              <h2 className="mt-4 text-2xl font-semibold tracking-tight text-ink">Local opportunities.<br />International talent.</h2>
+              <div className="mt-6 grid grid-cols-2 gap-4 border-t border-blue-100 pt-5">
+                <p className="text-sm text-slate-600"><strong className="block text-3xl font-semibold text-espoo">{directory?.companies.length ?? '—'}</strong>Employers to meet</p>
+                <p className="text-sm text-slate-600"><strong className="block text-3xl font-semibold text-espoo">{directory?.candidates.length ?? '—'}</strong>Talent profiles</p>
+              </div>
+              <a href="#workspace" className="mt-6 flex items-center justify-between rounded-lg bg-espoo px-4 py-3 font-semibold text-white">Explore your workspace <span aria-hidden="true">→</span></a>
+            </aside>
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-10">
-        {role === 'organizer' && <OrganizerAudit />}
-        {error && role !== 'organizer' && (
+      <main id="workspace" className="mx-auto max-w-6xl scroll-mt-6 px-5 py-8 sm:px-8 sm:py-10">
+        {role === 'organizer' && directory && <OrganizerWorkspace companies={directory.companies} />}
+        {error && (
           <div className={card}>
             <p role="alert">{error}</p>
             <button type="button" className="mt-3 cursor-pointer font-semibold text-espoo underline" onClick={() => {
@@ -67,13 +79,15 @@ function App() {
             }}>Retry</button>
           </div>
         )}
-        {role !== 'organizer' && !directory && !error && <p role="status">Loading directory…</p>}
+        {!directory && !error && <p role="status">Loading directory…</p>}
         {directory && (
-          <div hidden={role !== 'talent'}><TalentWorkspace {...directory} /></div>
+          <div hidden={role !== 'talent'}><TalentWorkspace {...directory} onSaved={(candidate) => setDirectory((current) => current && {
+            ...current, candidates: current.candidates.map((previous) => previous.id === candidate.id ? candidate : previous),
+          })} /></div>
         )}
         {directory && (
           <div hidden={role !== 'employer'}>
-            <EmployerWorkspace companies={directory.companies} skills={directory.skills} onCompanySaved={(company) => {
+            <EmployerWorkspace companies={directory.companies} skills={directory.skills} candidates={directory.candidates} onCompanySaved={(company) => {
               setDirectory((current) => current && {
                 ...current,
                 companies: current.companies.map((previous) => previous.id === company.id ? company : previous),

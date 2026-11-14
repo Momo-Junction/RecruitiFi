@@ -19,6 +19,7 @@ from .models import (
     RankedMatch,
     Skill,
 )
+from .profile_materials import candidate_profile, router as profile_router
 
 COMPANY_JSON_FIELDS = ("must_have_skills", "nice_to_have_skills")
 CANDIDATE_JSON_FIELDS = ("languages", "skills")
@@ -28,10 +29,15 @@ CANDIDATE_JSON_FIELDS = ("languages", "skills")
 async def lifespan(app: FastAPI):
     with connect() as connection:
         connection.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        connection.execute(
+            "UPDATE skills SET name = ? WHERE name = ?",
+            ("Quantum circuit programming with Qiskit", "Quantum Computing"),
+        )
     yield
 
 
 app = FastAPI(title="City of Espoo TalentMatch", lifespan=lifespan)
+app.include_router(profile_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -41,7 +47,7 @@ app.add_middleware(
         ).split(",")
         if origin.strip()
     ],
-    allow_methods=["GET", "POST", "PUT"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type"],
 )
 
@@ -73,7 +79,9 @@ def list_companies():
 
 @app.get("/api/candidates", response_model=list[Candidate])
 def list_candidates():
-    return read_rows("SELECT * FROM candidates ORDER BY id", *CANDIDATE_JSON_FIELDS)
+    with connect() as connection:
+        ids = [row["id"] for row in connection.execute("SELECT id FROM candidates ORDER BY id")]
+        return [candidate_profile(connection, candidate_id)["candidate"] for candidate_id in ids]
 
 
 def get_company(company_id: int) -> Company:
@@ -192,7 +200,7 @@ def rank_company_matches(company_id: PositiveId):
     "/api/companies/{company_id}/matches/{anonymous_code}/accept",
     response_model=MeetingContact,
 )
-def accept_meeting(company_id: PositiveId, anonymous_code: str):
+def accept_meeting(company_id: PositiveId, anonymous_code: str, human_reviewed: bool = False):
     company = get_company(company_id)
     rows = read_rows(
         "SELECT * FROM candidates WHERE anonymous_code = ?", *CANDIDATE_JSON_FIELDS,
@@ -200,10 +208,12 @@ def accept_meeting(company_id: PositiveId, anonymous_code: str):
     )
     if not rows:
         raise HTTPException(status_code=404, detail="Candidate not found.")
-    candidate = Candidate.model_validate(rows[0])
+    with connect() as connection:
+        candidate = Candidate.model_validate(candidate_profile(connection, rows[0]["id"])["candidate"])
     match = score_for_company(candidate, company, read_skill_names())
+    match["human_reviewed"] = human_reviewed
     write_audit([audit_score(candidate, company, match, "meeting_review")])
-    if not (match["dealbreakers_passed"] and match["meets_threshold"]):
+    if not human_reviewed and not (match["dealbreakers_passed"] and match["meets_threshold"]):
         raise HTTPException(status_code=409, detail="Candidate no longer meets the role requirements.")
 
     verified = sorted(
@@ -215,7 +225,7 @@ def accept_meeting(company_id: PositiveId, anonymous_code: str):
     )
     names = list(dict.fromkeys(skill["skill_name"] for skill in verified))[:2]
     starter = (
-        "Shared Signal: Verified " + " & ".join(names)
+        "Shared skills with submitted certificates: " + " & ".join(names)
         if names else "Ask about a recent project using one of the role’s skills."
     )
     return MeetingContact(
@@ -233,11 +243,8 @@ def calculate_event_metrics():
                 connection.execute("SELECT * FROM companies ORDER BY id"), COMPANY_JSON_FIELDS,
             )
         ]
-        candidates = [
-            Candidate.model_validate(row) for row in decode_rows(
-                connection.execute("SELECT * FROM candidates ORDER BY id"), CANDIDATE_JSON_FIELDS,
-            )
-        ]
+        ids = [row["id"] for row in connection.execute("SELECT id FROM candidates ORDER BY id")]
+        candidates = [Candidate.model_validate(candidate_profile(connection, candidate_id)["candidate"]) for candidate_id in ids]
         skill_names = {row["id"]: row["name"] for row in connection.execute("SELECT id, name FROM skills")}
 
     entries = []

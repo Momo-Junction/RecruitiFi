@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   acceptCompanyMeeting, loadCompanyMatches, saveCompanyRole,
-  type Company, type CompanyRole, type MeetingContact, type RankedMatch, type Skill, type WeightedSkill,
+  type Candidate, type Company, type CompanyRole, type MeetingContact, type RankedMatch, type Skill, type WeightedSkill,
 } from './api'
 
 const panel = 'rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6'
@@ -128,6 +128,7 @@ function QuickRoleBuilder({ company, skills, onSave, onClose }: {
 function CandidateSignal({ match, companyId }: { match: RankedMatch; companyId: number }) {
   const [contact, setContact] = useState<MeetingContact>()
   const [accepting, setAccepting] = useState(false)
+  const [reviewed, setReviewed] = useState(false)
   const [error, setError] = useState('')
   const signals = [...match.must_have_skills, ...match.nice_to_have_skills].filter(({ evidence_tier }) => evidence_tier !== 'missing')
   return (
@@ -137,15 +138,22 @@ function CandidateSignal({ match, companyId }: { match: RankedMatch; companyId: 
         <strong className="rounded-lg bg-mist px-2.5 py-1 text-lg tabular-nums text-espoo">{format.format(match.total_score)}%</strong>
       </div>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-emerald-800">
-        <span>✓ Language compatible</span><span>✓ Visa compatible</span>
+        <span>{match.dealbreakers_passed ? '✓ Role requirements met' : 'Requirements to discuss'}</span>
       </div>
       <ul aria-label="Overlapping skill evidence" className="mt-3 flex flex-wrap gap-2">
         {signals.map(({ skill_id, skill_name, evidence_tier }) => (
           <li key={skill_id} className={`rounded-md px-2 py-1 text-xs ${evidence_tier === 'certificate' ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-100 text-slate-700'}`}>
-            {skill_name} · {evidence_tier === 'certificate' ? 'Verified' : evidence_tier === 'portfolio' ? 'Portfolio' : 'Self-Declared'}
+            {skill_name} · {evidence_tier === 'certificate' ? 'Certificate submitted' : evidence_tier === 'portfolio' ? 'Work sample' : 'Listed skill'}
           </li>
         ))}
       </ul>
+      {(!match.dealbreakers_passed || !match.meets_threshold) && (
+        <div className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
+          {match.dealbreaker_reasons.map((reason) => <p key={reason}>{reason}</p>)}
+          {!match.meets_threshold && <p>Below the role’s suggested match level.</p>}
+          <label className="mt-2 flex items-start gap-2"><input type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)} />I have reviewed this profile and would like a conversation.</label>
+        </div>
+      )}
       {contact ? (
         <div className="mt-4 rounded-lg border border-blue-100 bg-mist/60 p-3 text-sm" aria-live="polite">
           <p className="font-bold">{contact.full_name}</p>
@@ -153,10 +161,10 @@ function CandidateSignal({ match, companyId }: { match: RankedMatch; companyId: 
           <p className="mt-2 font-semibold text-espoo">{contact.conversation_starter}</p>
         </div>
       ) : (
-        <button type="button" disabled={accepting} className={`mt-4 ${button}`} onClick={async () => {
+        <button type="button" disabled={accepting || ((!match.dealbreakers_passed || !match.meets_threshold) && !reviewed)} className={`mt-4 ${button}`} onClick={async () => {
           setAccepting(true)
           setError('')
-          try { setContact(await acceptCompanyMeeting(companyId, match.anonymous_code)) }
+          try { setContact(await acceptCompanyMeeting(companyId, match.anonymous_code, reviewed)) }
           catch (cause) { setError((cause as Error).message) }
           finally { setAccepting(false) }
         }}>{accepting ? 'Accepting…' : 'Accept 1:1 Meeting'}</button>
@@ -166,11 +174,12 @@ function CandidateSignal({ match, companyId }: { match: RankedMatch; companyId: 
   )
 }
 
-export function EmployerWorkspace({ companies, skills, onCompanySaved }: {
-  companies: Company[]; skills: Skill[]; onCompanySaved: (company: Company) => void
+export function EmployerWorkspace({ companies, skills, candidates, onCompanySaved }: {
+  companies: Company[]; skills: Skill[]; candidates: Candidate[]; onCompanySaved: (company: Company) => void
 }) {
   const [companyId, setCompanyId] = useState(companies[0]?.id)
   const [editing, setEditing] = useState(false)
+  const [showAll, setShowAll] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const [notice, setNotice] = useState('')
   const [result, setResult] = useState<{ company: Company; attempt: number; matches: RankedMatch[]; failed: boolean }>()
@@ -182,15 +191,16 @@ export function EmployerWorkspace({ companies, skills, onCompanySaved }: {
     const controller = new AbortController()
     loadCompanyMatches(company.id, controller.signal).then((matches) => {
       if (!controller.signal.aborted) setResult({
-        company, attempt, matches: matches.filter((match) => match.dealbreakers_passed && match.meets_threshold), failed: false,
+        company, attempt, matches, failed: false,
       })
     }).catch(() => {
       if (!controller.signal.aborted) setResult({ company, attempt, matches: [], failed: true })
     })
     return () => controller.abort()
-  }, [company, attempt])
+  }, [company, attempt, candidates])
 
   if (!company) return <p>No employers available.</p>
+  const visibleMatches = current?.matches.filter((match) => showAll || (match.dealbreakers_passed && match.meets_threshold)) ?? []
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(21rem,0.9fr)_minmax(0,1.3fr)]">
       <div className="min-w-0">
@@ -216,18 +226,19 @@ export function EmployerWorkspace({ companies, skills, onCompanySaved }: {
       </div>
       <section className={`${panel} min-w-0`} aria-labelledby="queue-heading">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 id="queue-heading" className="text-xl font-bold tracking-tight">Blind-First Candidate Signal Queue</h2>
+          <h2 id="queue-heading" className="text-xl font-bold tracking-tight">People to meet</h2>
           <span className="rounded-full bg-mist px-3 py-1 text-xs font-semibold text-espoo">Blind Privacy Mode · ON</span>
         </div>
-        <p className="mt-2 text-sm text-slate-600">Only candidates who pass the dealbreakers and meet the {company.min_match_threshold}% threshold appear here.</p>
+        <p className="mt-2 text-sm text-slate-600">Explore shared skills and choose who you want to speak with.</p>
+        <label className="mt-4 flex items-center gap-2 text-sm font-semibold text-espoo"><input type="checkbox" checked={showAll} onChange={(event) => setShowAll(event.target.checked)} />Explore all talent</label>
         {!current && <p role="status" className="mt-4 text-sm text-slate-600">Refreshing candidate scores…</p>}
         {current?.failed && <p role="alert" className="mt-4 text-sm text-red-800">Could not load the queue. <button type="button" className={link} onClick={() => setAttempt((value) => value + 1)}>Retry</button></p>}
         {current && !current.failed && (
           <div className="mt-4">
-            <p role="status" className="text-sm font-semibold text-espoo">{current.matches.length} eligible {current.matches.length === 1 ? 'candidate' : 'candidates'}</p>
-            {current.matches.length === 0 && <p className="mt-3 rounded-lg bg-mist p-4 text-sm">No candidates meet the saved role requirements.</p>}
+            <p role="status" className="text-sm font-semibold text-espoo">{visibleMatches.length} {showAll ? 'profiles to explore' : 'suggested conversations'}</p>
+            {visibleMatches.length === 0 && <p className="mt-3 rounded-lg bg-mist p-4 text-sm">No suggestions yet. Explore all talent to find potential beyond the role requirements.</p>}
             <ul className="mt-3 space-y-3">
-              {current.matches.map((match) => <CandidateSignal key={match.anonymous_code} match={match} companyId={company.id} />)}
+              {visibleMatches.map((match) => <CandidateSignal key={match.anonymous_code} match={match} companyId={company.id} />)}
             </ul>
           </div>
         )}

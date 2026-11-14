@@ -21,7 +21,7 @@ SKILLS = [
     ("Statistical Analysis", "Data and AI"),
     ("C++", "Engineering"),
     ("Digital Signal Processing", "Engineering"),
-    ("Quantum Computing", "Engineering"),
+    ("Quantum circuit programming with Qiskit", "Engineering"),
     ("Electronics Prototyping", "Engineering"),
     ("Power Systems Engineering", "Energy and Sustainability"),
     ("Energy Modeling", "Energy and Sustainability"),
@@ -44,7 +44,7 @@ SKILLS = [
 # Weighted requirements use the names from the catalog above.
 COMPANIES = [
     ("Kide Quantum Labs", "Quantum hardware · Otaniemi", "A01", True, "English", 75,
-     {"Quantum Computing": 30, "Python": 25, "Digital Signal Processing": 15},
+     {"Quantum circuit programming with Qiskit": 30, "Python": 25, "Digital Signal Processing": 15},
      {"C++": 10, "Electronics Prototyping": 10}),
     ("Kallio Grid Energy", "Clean energy · Keilaniemi", "A02", True, "English", 70,
      {"Power Systems Engineering": 30, "Energy Modeling": 25, "Data Analysis": 15},
@@ -72,7 +72,7 @@ COMPANIES = [
 # Each candidate's evidence is grouped by tier and expanded into skill records.
 CANDIDATES = [
     (402, "Aino Lehtinen", True, True, {"Finnish": "C2", "English": "C1", "Swedish": "B1"}, False,
-     {"certificate": ["Quantum Computing"], "portfolio": ["Python", "Digital Signal Processing", "C++"], "self_declared": ["Git"]}),
+     {"certificate": ["Quantum circuit programming with Qiskit"], "portfolio": ["Python", "Digital Signal Processing", "C++"], "self_declared": ["Git"]}),
     (406, "Samir Haddad", True, True, {"Arabic": "C2", "English": "C1", "Finnish": "A2"}, True,
      {"certificate": ["Cloud Infrastructure", "Kubernetes"], "portfolio": ["Docker", "CI/CD", "Network Security"]}),
     (411, "Nhi Tran", True, True, {"Vietnamese": "C2", "English": "C1", "Finnish": "B1"}, False,
@@ -88,7 +88,7 @@ CANDIDATES = [
     (438, "Iryna Kovalenko", True, True, {"Ukrainian": "C2", "English": "B2", "Finnish": "B1"}, False,
      {"certificate": ["Embedded Systems"], "portfolio": ["C++", "Electronics Prototyping", "Digital Signal Processing", "Git"]}),
     (445, "Joonas Salmi", False, True, {"Finnish": "C2", "English": "B2"}, False,
-     {"portfolio": ["Python", "Machine Learning", "Statistical Analysis"], "self_declared": ["SQL", "Data Analysis", "Quantum Computing"]}),
+     {"portfolio": ["Python", "Machine Learning", "Statistical Analysis"], "self_declared": ["SQL", "Data Analysis", "Quantum circuit programming with Qiskit"]}),
     (451, "Priya Menon", True, False, {"Malayalam": "C2", "English": "C1", "Finnish": "A2"}, True,
      {"certificate": ["Cybersecurity Risk Assessment", "Network Security"], "self_declared": ["Data Privacy", "Cloud Infrastructure", "Technical Documentation"]}),
     (458, "Elina Mäkinen", True, True, {"Finnish": "C2", "English": "C1"}, False,

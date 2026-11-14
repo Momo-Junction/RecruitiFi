@@ -38,3 +38,18 @@ CREATE TABLE IF NOT EXISTS match_audit (
     inputs TEXT NOT NULL CHECK (json_type(inputs) = 'object'),
     result TEXT NOT NULL CHECK (json_type(result) = 'object')
 );
+
+CREATE TABLE IF NOT EXISTS profile_materials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    candidate_id INTEGER NOT NULL REFERENCES candidates(id),
+    category TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    skill_id INTEGER REFERENCES skills(id),
+    url TEXT,
+    filename TEXT,
+    content_type TEXT,
+    content BLOB,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    CHECK ((url IS NOT NULL AND content IS NULL) OR (url IS NULL AND content IS NOT NULL))
+);
