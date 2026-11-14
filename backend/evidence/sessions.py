@@ -1,4 +1,4 @@
-"""Password-verified synthetic demo sessions, not production authentication."""
+"""Password-verified accounts or explicit public demo selections, not production auth."""
 import base64
 import hashlib
 import hmac
@@ -17,6 +17,13 @@ router = APIRouter(prefix='/api/evidence-session')
 COOKIE = 'recruitifi_evidence_demo'
 _attempts = {}
 _lock = threading.Lock()
+
+
+def password_free_demo():
+    value=os.environ.get('TALENTMATCH_PASSWORD_FREE_DEMO','false').strip().lower()
+    if value not in ('true','false'):
+        raise HTTPException(503,'TALENTMATCH_PASSWORD_FREE_DEMO must be true or false.')
+    return value=='true'
 
 
 def employer_grants(approved):
@@ -75,7 +82,7 @@ def session(request, write=False):
         data = json.loads(base64.urlsafe_b64decode(value))
         _, accounts = settings()
         account = BY_ID[data['account']]
-        if data['expires'] <= time.time() or data['account'] not in accounts:
+        if data['expires'] <= time.time() or data['account'] not in accounts or data.get('password_free_demo',False)!=password_free_demo():
             raise ValueError()
     except (ValueError, KeyError, TypeError):
         raise HTTPException(403, 'Sign in to your synthetic demo account.') from None
@@ -98,18 +105,20 @@ def current(request: Request, response: Response):
 def configuration_status(response: Response):
     """Public capability bit only; never disclose accounts, passwords or secrets."""
     response.headers['Cache-Control'] = 'no-store'
-    enabled = os.environ.get('TALENTMATCH_VERIFIED_DEMO_LOGIN', '0') == '1'
+    public = password_free_demo()
+    enabled = public or os.environ.get('TALENTMATCH_VERIFIED_DEMO_LOGIN', '0') == '1'
     if enabled:
         try:
             settings()
         except HTTPException:
             raise HTTPException(503, 'Verified demo login is not configured.') from None
-    return {'verified_login_required': enabled}
+    return {'verified_login_required': enabled, **({'password_free_demo': True} if public else {})}
 
 
 @router.post('')
 async def login(request: Request, response: Response):
     key, accounts = settings()
+    public = password_free_demo()
     origin(request)
     with _lock:
         peer = request.client.host if request.client else 'unknown'
@@ -128,13 +137,19 @@ async def login(request: Request, response: Response):
         body.extend(chunk)
     try:
         supplied = json.loads(body)
-        identity, password = supplied['account'], supplied['password']
+        identity, password = supplied['account'], supplied.get('password','')
         expected = accounts.get(identity)
-        if not isinstance(password, str) or expected is None or not secrets.compare_digest(password.encode(), expected.encode()):
+        if not isinstance(password, str) or expected is None or (not public and not secrets.compare_digest(password.encode(), expected.encode())):
             raise ValueError()
     except (ValueError, KeyError, TypeError):
         raise HTTPException(403, 'Invalid synthetic account credentials.') from None
-    data = {'account': identity, 'expires': int(time.time())+3600, 'csrf': secrets.token_urlsafe(32)}
+    if public:
+        from ..demo_accounts import account_record
+        from ..database import connect
+        with connect() as connection:
+            if not account_record(connection,BY_ID[identity])['available']:
+                raise HTTPException(409,'The selected demo profile is missing.')
+    data = {'account': identity, 'expires': int(time.time())+3600, 'csrf': secrets.token_urlsafe(32), 'password_free_demo': public}
     value = base64.urlsafe_b64encode(json.dumps(data).encode()).decode()
     signed = value+'.'+hmac.new(key, value.encode(), hashlib.sha256).hexdigest()
     secure = expected_origin(request).startswith('https://')
