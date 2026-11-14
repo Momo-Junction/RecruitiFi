@@ -22,7 +22,7 @@ class SwipeApiTests(unittest.IsolatedAsyncioTestCase):
             seed()
         self.vote = dict(candidate_id=402, company_id=1, actor='talent', decision='like')
 
-    async def request(self, method, path='/api/swipes', value=None):
+    async def request(self, method, path='/api/swipes', value=None, headers=()):
         messages = []
         payload = json.dumps(value).encode() if value is not None else b''
 
@@ -35,7 +35,7 @@ class SwipeApiTests(unittest.IsolatedAsyncioTestCase):
         await app({
             'type': 'http', 'asgi': {'version': '3.0'}, 'http_version': '1.1',
             'method': method, 'scheme': 'http', 'path': path, 'raw_path': path.encode(),
-            'query_string': b'', 'root_path': '', 'headers': [(b'content-type', b'application/json')],
+            'query_string': b'', 'root_path': '', 'headers': [(b'content-type', b'application/json'),*headers],
             'client': ('127.0.0.1', 12345), 'server': ('test', 80),
         }, receive, send)
         body = b''.join(message.get('body', b'') for message in messages)
@@ -58,14 +58,24 @@ class SwipeApiTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.request('GET'))[1], [employer])
 
     async def test_shortlisted_candidate_can_submit_and_employer_can_verify(self):
+        import base64,hmac,hashlib,time
+        from .evidence.sessions import COOKIE
+        key='synthetic-task-signing-key-for-tests-123456'
+        config=patch.dict('os.environ',TALENTMATCH_AI_SYNTHETIC_DEMO='1',TALENTMATCH_AI_SYNTHETIC_CANDIDATES='402,406',TALENTMATCH_AI_DEMO_TOKEN='synthetic-task-operator-token-1234567890',TALENTMATCH_AI_SESSION_SECRET=key,TALENTMATCH_AI_DEMO_ACCOUNTS=json.dumps({'talent-001':'synthetic-password-1','employer-001':'synthetic-password-2'}))
+        config.start();self.addCleanup(config.stop)
+        async def task_request(method,path,value=None,role='employer'):
+            alias='employer-001' if role=='employer' else 'talent-001'
+            payload=base64.urlsafe_b64encode(json.dumps({'account':alias,'expires':time.time()+600,'csrf':'synthetic-csrf'}).encode()).decode()
+            cookie=COOKIE+'='+payload+'.'+hmac.new(key.encode(),payload.encode(),hashlib.sha256).hexdigest()
+            return await self.request(method,path,value,[(b'cookie',cookie.encode()),(b'origin',b'http://test'),(b'x-recruitifi-csrf',b'synthetic-csrf')])
         path = '/api/hiring-tasks'
         assignment = dict(candidate_id=402, company_id=1, title='Portfolio review', description='Share a project link.')
         employer = {**self.vote, 'actor': 'employer'}
 
-        self.assertEqual((await self.request('POST', path, assignment))[0], 409)
+        self.assertEqual((await task_request('POST', path, assignment))[0], 409)
         self.assertEqual((await self.request('PUT', value=employer))[0], 200)
-        self.assertEqual((await self.request('POST', path, {**assignment, 'title': '   '}))[0], 422)
-        status, task = await self.request('POST', path, assignment)
+        self.assertEqual((await task_request('POST', path, {**assignment, 'title': '   '}))[0], 422)
+        status, task = await task_request('POST', path, assignment)
         self.assertEqual(status, 201)
         self.assertIsNone(task['submission_url'])
         self.assertEqual((await self.request('DELETE', '/api/swipes/employer/402/1'))[0], 409)
@@ -73,18 +83,18 @@ class SwipeApiTests(unittest.IsolatedAsyncioTestCase):
 
         task_path = f"{path}/{task['id']}"
         submission = {'url': 'https://example.com/project'}
-        self.assertEqual((await self.request('PUT', f'{task_path}/submission/406', submission))[0], 409)
-        self.assertEqual((await self.request('PUT', f'{task_path}/submission/402', {'url': 'ftp://example.com/work'}))[0], 422)
-        status, submitted = await self.request('PUT', f'{task_path}/submission/402', submission)
+        self.assertEqual((await task_request('PUT', f'{task_path}/submission/406', submission,role='talent'))[0], 403)
+        self.assertEqual((await task_request('PUT', f'{task_path}/submission/402', {'url': 'ftp://example.com/work'},role='talent'))[0], 422)
+        status, submitted = await task_request('PUT', f'{task_path}/submission/402', submission,role='talent')
         self.assertEqual(status, 200)
         self.assertEqual(submitted['submission_url'], submission['url'])
-        self.assertEqual((await self.request('PUT', f'{task_path}/verification/2', submission))[0], 409)
-        self.assertEqual((await self.request('PUT', f'{task_path}/verification/1', {'url': 'https://example.com/old'}))[0], 409)
-        status, verified = await self.request('PUT', f'{task_path}/verification/1', submission)
+        self.assertEqual((await task_request('PUT', f'{task_path}/verification/2', submission))[0], 403)
+        self.assertEqual((await task_request('PUT', f'{task_path}/verification/1', {'url': 'https://example.com/old'}))[0], 409)
+        status, verified = await task_request('PUT', f'{task_path}/verification/1', submission)
         self.assertEqual(status, 200)
         self.assertTrue(verified['verified'])
-        self.assertEqual((await self.request('PUT', f'{task_path}/submission/402', submission))[0], 409)
-        self.assertEqual(await self.request('GET', path), (200, [verified]))
+        self.assertEqual((await task_request('PUT', f'{task_path}/submission/402', submission,role='talent'))[0], 409)
+        self.assertEqual(await task_request('GET', path), (200, [verified]))
 
     async def test_saved_profile_routes_load_and_persist_materials(self):
         _, candidates = await self.request('GET', '/api/candidates')
