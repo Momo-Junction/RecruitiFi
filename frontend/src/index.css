@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --color-ink: #081b3a;
+  --color-espoo: #012169;
+  --color-aqua: #9ad1d4;
+  --color-mist: #eff5fb;
+}
+
+@layer base {
+  :focus-visible {
+    outline: 3px solid #0067ce;
+    outline-offset: 3px;
+  }
+}
+
+.event-hero {
+  background: linear-gradient(115deg, var(--color-espoo), #103b8b);
+}
+
+.event-hero::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background: repeating-radial-gradient(
+    ellipse at 100% 105%,
+    transparent 0 32px,
+    rgb(154 209 212 / 28%) 33px 34px,
+    transparent 35px 48px
+  );
+  mask-image: linear-gradient(105deg, transparent 52%, black 95%);
+}
+
+@media (max-width: 640px) {
+  .event-hero::after {
+    opacity: .45;
+  }
+}
