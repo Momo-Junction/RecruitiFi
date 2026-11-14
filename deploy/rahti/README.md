@@ -823,3 +823,43 @@ required. Keep an external verified backup for recovery; do not assume reverting
 an image reverts persistent data. Older application versions ignore the additive
 notification table. Validate both like orders, the Interested badge, read status,
 withdrawal and cross-session polling after the authorized rollout.
+
+
+## Installing individual demo accounts
+
+This release reuses 15 existing candidates and companies 1–5 for deterministic
+password-free demo account selection; companies 6–8 remain discoverable. See the
+root README for all ID mappings and the explicit limitations of demo isolation.
+There is no schema change, account provisioning job or new runtime configuration.
+Do not reseed, reset or recreate SQLite storage. Missing profiles are reported as
+unavailable; startup never substitutes another account. Old browser role-only
+sessions need one new account selection. The current shared Basic gate/public-mode
+flag stays unchanged; account selection does not bypass an enabled shared gate.
+
+After a verified external SQLite backup (earlier procedure), an authorized operator
+can rebuild and update the existing Deployment. These commands are documentation
+only and are not run by implementation/tests:
+
+```sh
+oc project  # Verify the existing demo project; do not create a replacement PVC.
+NS=$(oc project -q)
+TAG="demo-accounts-$(date -u +%Y%m%dT%H%M%SZ)"
+REGISTRY=image-registry.apps.2.rahti.csc.fi
+oc whoami -t | docker login --username unused --password-stdin "$REGISTRY"
+docker buildx build --platform linux/amd64 --push \
+  -t "$REGISTRY/$NS/recruitifi:$TAG" .
+oc set image deployment/recruitifi \
+  recruitifi="image-registry.openshift-image-registry.svc:5000/$NS/recruitifi:$TAG"
+oc rollout status deployment/recruitifi --timeout=180s
+oc logs deployment/recruitifi --tail=50
+oc get route recruitifi -o jsonpath='{.spec.host}'
+```
+
+This uses the existing image registry/project, one-replica Recreate strategy, PVC,
+Secret, Route, Service and environment. Updating the image restarts the Pod; do not
+issue a separate storage/reseed operation. Verify Aino/Samir account switching,
+Employer 1/2 editor isolation, notifications, uploads, direct refresh and Organizer
+after rollout. The local container test covers mapping, missing seeds, scoped
+profile writes, uploads, read state and persistence after UID-changing recreation,
+as well as both existing hosted authentication modes. Actual SCC/CSI/Route and
+browser behavior in the live cluster still require authorized Rahti validation.
