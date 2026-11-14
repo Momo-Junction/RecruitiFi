@@ -21,6 +21,7 @@ interface SkillSignal {
 }
 
 export interface RankedMatch extends Match {
+  candidate_id: number
   anonymous_code: string
   must_have_skills: SkillSignal[]
   nice_to_have_skills: SkillSignal[]
@@ -161,4 +162,28 @@ export async function acceptCompanyMeeting(companyId: number, anonymousCode: str
     ? 'This candidate no longer meets the saved role requirements. Refresh the queue.'
     : 'Could not accept the meeting. Try again.')
   return response.json()
+}
+
+export interface SwipeDecision {
+  candidate_id: number
+  company_id: number
+  actor: 'talent' | 'employer'
+  decision: 'like' | 'pass'
+}
+
+export function loadSwipes(signal: AbortSignal) {
+  return get<SwipeDecision[]>('swipes', signal)
+}
+
+export async function saveSwipe(swipe: SwipeDecision): Promise<SwipeDecision> {
+  const response = await fetch(`${apiUrl}/api/swipes`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(swipe),
+  })
+  if (!response.ok) throw new Error('Could not save your swipe. Please try again.')
+  return response.json()
+}
+
+export async function undoSwipe(swipe: Pick<SwipeDecision, 'actor' | 'candidate_id' | 'company_id'>) {
+  const response = await fetch(`${apiUrl}/api/swipes/${swipe.actor}/${swipe.candidate_id}/${swipe.company_id}`, { method: 'DELETE' })
+  if (!response.ok) throw new Error('Could not undo your swipe. Please try again.')
 }

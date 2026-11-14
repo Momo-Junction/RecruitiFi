@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Literal
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
@@ -18,6 +19,7 @@ from .models import (
     PositiveId,
     RankedMatch,
     Skill,
+    SwipeDecision,
 )
 from .profile_materials import candidate_profile, router as profile_router
 
@@ -82,6 +84,26 @@ def list_candidates():
     with connect() as connection:
         ids = [row["id"] for row in connection.execute("SELECT id FROM candidates ORDER BY id")]
         return [candidate_profile(connection, candidate_id)["candidate"] for candidate_id in ids]
+
+
+@app.get('/api/swipes', response_model=list[SwipeDecision])
+def list_swipes():
+    return read_rows('SELECT * FROM swipe_decisions ORDER BY candidate_id, company_id, actor')
+
+
+@app.put('/api/swipes', response_model=SwipeDecision)
+def save_swipe(swipe: SwipeDecision):
+    with connect() as connection:
+        if not connection.execute('SELECT 1 FROM candidates WHERE id = ?', (swipe.candidate_id,)).fetchone():
+            raise HTTPException(status_code=404, detail='Candidate not found.')
+        if not connection.execute('SELECT 1 FROM companies WHERE id = ?', (swipe.company_id,)).fetchone():
+            raise HTTPException(status_code=404, detail='Company not found.')
+        connection.execute(
+            'INSERT INTO swipe_decisions (candidate_id, company_id, actor, decision) VALUES (?, ?, ?, ?) '
+            'ON CONFLICT(candidate_id, company_id, actor) DO UPDATE SET decision = excluded.decision',
+            (swipe.candidate_id, swipe.company_id, swipe.actor, swipe.decision),
+        )
+    return swipe
 
 
 def get_company(company_id: int) -> Company:
@@ -281,3 +303,13 @@ def list_audit_calculations(
         "inputs", "result", params=(before_id, before_id, limit + 1),
     )
     return {"entries": rows[:limit], "next_before_id": rows[limit - 1]["id"] if len(rows) > limit else None}
+
+
+@app.delete('/api/swipes/{actor}/{candidate_id}/{company_id}')
+def undo_swipe(actor: Literal['talent', 'employer'], candidate_id: PositiveId, company_id: PositiveId):
+    with connect() as connection:
+        connection.execute(
+            'DELETE FROM swipe_decisions WHERE actor = ? AND candidate_id = ? AND company_id = ?',
+            (actor, candidate_id, company_id),
+        )
+    return {'deleted': True}

@@ -1,3 +1,5 @@
+import { SwipeDeck, type DiscoveryCard } from './SwipeDeck'
+import type { SwipeStore } from './useSwipes'
 import { useEffect, useState } from 'react'
 import {
   acceptCompanyMeeting, loadCompanyMatches, saveCompanyRole,
@@ -174,9 +176,11 @@ function CandidateSignal({ match, companyId }: { match: RankedMatch; companyId: 
   )
 }
 
-export function EmployerWorkspace({ companies, skills, candidates, onCompanySaved }: {
+export function EmployerWorkspace({ companies, skills, candidates, onCompanySaved, swipeStore }: {
   companies: Company[]; skills: Skill[]; candidates: Candidate[]; onCompanySaved: (company: Company) => void
+  swipeStore: SwipeStore
 }) {
+  const [view, setView] = useState<'swipe' | 'queue'>('swipe')
   const [companyId, setCompanyId] = useState(companies[0]?.id)
   const [editing, setEditing] = useState(false)
   const [showAll, setShowAll] = useState(false)
@@ -201,6 +205,17 @@ export function EmployerWorkspace({ companies, skills, candidates, onCompanySave
 
   if (!company) return <p>No employers available.</p>
   const visibleMatches = current?.matches.filter((match) => showAll || (match.dealbreakers_passed && match.meets_threshold)) ?? []
+  const decisions = swipeStore.swipes.filter((row) => row.company_id === company.id)
+  const own = decisions.filter((row) => row.actor === 'employer')
+  const likedBy = new Set(decisions.filter((row) => row.actor === 'talent' && row.decision === 'like').map((row) => row.candidate_id))
+  const cards: DiscoveryCard[] = (current?.matches ?? []).filter((match) => !own.some((row) => row.candidate_id === match.candidate_id)).map((match) => ({
+    id: match.candidate_id, name: match.anonymous_code, subtitle: 'Talent in Espoo · identity stays private',
+    monogram: match.anonymous_code.slice(-2), score: match.total_score,
+    eligible: match.dealbreakers_passed && match.meets_threshold, likedYou: likedBy.has(match.candidate_id),
+    facts: [match.dealbreakers_passed ? 'Language & visa compatible' : 'Check role requirements', `${company.min_match_threshold}% meeting threshold`],
+    skills: [...match.must_have_skills, ...match.nice_to_have_skills].map((skill) => ({ name: skill.skill_name, matched: skill.evidence_tier !== 'missing' })),
+    warnings: [...match.dealbreaker_reasons, ...(!match.meets_threshold ? ['Below your meeting threshold'] : [])],
+  }))
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(21rem,0.9fr)_minmax(0,1.3fr)]">
       <div className="min-w-0">
@@ -224,7 +239,18 @@ export function EmployerWorkspace({ companies, skills, candidates, onCompanySave
           setNotice('Role saved.')
         }} />}
       </div>
-      <section className={`${panel} min-w-0`} aria-labelledby="queue-heading">
+      <div className="order-first min-w-0 lg:order-none">
+        <div className="talent-view-toggle" aria-label="Talent discovery mode">
+          <button type="button" aria-pressed={view === 'swipe'} onClick={() => setView('swipe')}>✦ Discover talent</button>
+          <button type="button" aria-pressed={view === 'queue'} onClick={() => { setView('queue') }}>Eligible queue</button>
+        </div>
+        {view === 'swipe' && <SwipeDeck key={company.id} cards={cards} loading={!current || !swipeStore.ready} error={swipeStore.error || (current?.failed ? 'Could not load candidate scores.' : '')}
+          onRetry={() => { swipeStore.retry(); setAttempt((value) => value + 1) }}
+          onUndo={(candidate_id) => swipeStore.undo({ candidate_id, company_id: company.id, actor: 'employer' })}
+          onDecide={(candidate_id, decision) => swipeStore.decide({ candidate_id, company_id: company.id, actor: 'employer', decision })}
+          saved={own.filter((row) => row.decision === 'like').map((row) => ({ id: row.candidate_id, name: current?.matches.find((match) => match.candidate_id === row.candidate_id)?.anonymous_code ?? 'Talent', mutual: likedBy.has(row.candidate_id) }))}
+          onReview={() => { setShowAll(true); setView('queue') }} />}
+      <section hidden={view !== 'queue'} className={`${panel} min-w-0`} aria-labelledby="queue-heading">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="queue-heading" className="text-xl font-bold tracking-tight">People to meet</h2>
           <span className="rounded-full bg-mist px-3 py-1 text-xs font-semibold text-espoo">Blind Privacy Mode · ON</span>
@@ -243,6 +269,7 @@ export function EmployerWorkspace({ companies, skills, candidates, onCompanySave
           </div>
         )}
       </section>
+      </div>
     </div>
   )
 }

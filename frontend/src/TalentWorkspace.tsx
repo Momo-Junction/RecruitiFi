@@ -1,3 +1,5 @@
+import { SwipeDeck, type DiscoveryCard } from './SwipeDeck'
+import type { SwipeStore } from './useSwipes'
 import { useEffect, useState } from 'react'
 import { ProfileMaterials } from './ProfileMaterials'
 import {
@@ -73,12 +75,14 @@ function MatchBreakdown({ match, busy, onClose }: {
   )
 }
 
-export function TalentWorkspace({ candidates, companies, skills, onSaved }: {
+export function TalentWorkspace({ candidates, companies, skills, onSaved, swipeStore }: {
+  swipeStore: SwipeStore
   candidates: Candidate[]
   companies: Company[]
   skills: Skill[]
   onSaved: (candidate: Candidate) => void
 }) {
+  const [view, setView] = useState<'swipe' | 'list'>('swipe')
   const [candidateId, setCandidateId] = useState(candidates[0]?.id)
   const [savedProfile, setSavedProfile] = useState<SavedProfile>()
   const [profileError, setProfileError] = useState('')
@@ -117,7 +121,7 @@ export function TalentWorkspace({ candidates, companies, skills, onSaved }: {
     Promise.all(companies.map(({ id }) => simulateMatch(id, payload, controller.signal)))
       .then((matches) => {
         if (!controller.signal.aborted) {
-          matches.sort((a, b) => b.total_score - a.total_score || a.company_id - b.company_id)
+          matches.sort((a, b) => Number(b.dealbreakers_passed) - Number(a.dealbreakers_passed) || b.total_score - a.total_score || a.company_id - b.company_id)
           setResult({ candidateId, profile, companies, attempt, matches, failed: false })
         }
       })
@@ -151,6 +155,21 @@ export function TalentWorkspace({ candidates, companies, skills, onSaved }: {
     } catch (cause) { setProfileError((cause as Error).message) }
     finally { setProfileBusy(false) }
   }
+  const decisions = swipeStore.swipes.filter((row) => row.candidate_id === candidate.id)
+  const own = decisions.filter((row) => row.actor === 'talent')
+  const likedBy = new Set(decisions.filter((row) => row.actor === 'employer' && row.decision === 'like').map((row) => row.company_id))
+  const discoveryCards: DiscoveryCard[] = (current?.matches ?? []).filter((match) => !own.some((row) => row.company_id === match.company_id)).map((match) => {
+    const company = companyById.get(match.company_id)!
+    return {
+      id: company.id, name: company.name, subtitle: company.industry,
+      monogram: company.name.split(' ').slice(0, 2).map((word) => word[0]).join(''),
+      score: match.total_score, eligible: match.dealbreakers_passed && match.meets_threshold,
+      likedYou: likedBy.has(company.id),
+      facts: [`Booth ${company.booth_number}`, `${company.working_language} B2+`, company.relocation_support ? 'Relocation support' : 'No visa sponsorship'],
+      skills: [...company.must_have_skills, ...company.nice_to_have_skills].map(({ skill_id }) => ({ name: skillNames.get(skill_id) ?? `Skill ${skill_id}`, matched: profile.skills.some((skill) => skill.skill_id === skill_id) })),
+      warnings: [...match.dealbreaker_reasons, ...(!match.meets_threshold ? [`Below the ${match.min_match_threshold}% meeting threshold`] : [])],
+    }
+  })
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(19rem,0.8fr)_minmax(0,1.4fr)]">
@@ -200,7 +219,18 @@ export function TalentWorkspace({ candidates, companies, skills, onSaved }: {
           })}
         </ul>
       </section>
-      <section aria-labelledby="matches-heading" className={`${panel} min-w-0 overflow-hidden`}>
+      <div className="order-first min-w-0 lg:order-none">
+        <div className="talent-view-toggle" aria-label="Employer discovery mode">
+          <button type="button" aria-pressed={view === 'swipe'} onClick={() => setView('swipe')}>✦ Swipe & connect</button>
+          <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}>All employers</button>
+        </div>
+        {view === 'swipe' && <SwipeDeck key={candidate.id} cards={discoveryCards} loading={busy || !swipeStore.ready} error={swipeStore.error || (current?.failed ? 'Could not calculate your matches.' : '')}
+          onRetry={() => { swipeStore.retry(); setAttempt((value) => value + 1) }}
+          onUndo={(company_id) => swipeStore.undo({ candidate_id: candidate.id, company_id, actor: 'talent' })}
+          onDecide={(company_id, decision) => swipeStore.decide({ candidate_id: candidate.id, company_id, actor: 'talent', decision })}
+          saved={own.filter((row) => row.decision === 'like').map((row) => ({ id: row.company_id, name: companyById.get(row.company_id)?.name ?? 'Employer', mutual: likedBy.has(row.company_id) }))}
+          onReview={(id) => { setOpenCompany(id); setView('list') }} />}
+      <section hidden={view !== 'list'} aria-labelledby="matches-heading" className={`${panel} min-w-0 overflow-hidden`}>
         <div className="border-b border-slate-200 p-5 sm:p-6">
           <h2 id="matches-heading" className="text-xl font-bold tracking-tight">Live employer matches</h2>
           <p className="mt-1 text-sm text-slate-600">Sorted by match score. Select an employer to see the breakdown.</p>
@@ -230,6 +260,7 @@ export function TalentWorkspace({ candidates, companies, skills, onSaved }: {
         ))}
         {companies.length === 0 && <p className="p-5 text-sm text-slate-600">No employers available.</p>}
       </section>
+      </div>
     </div>
   )
 }
