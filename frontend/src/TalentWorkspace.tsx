@@ -1,14 +1,16 @@
+import { filterJobs, IndustryFilters, JobEmptyState, JobRequirements, jobCompanyId, useIndustryFilters } from './Jobs'
 import { NotificationBell } from './NotificationBell'
 import { SwipeDeck, type DiscoveryCard } from './SwipeDeck'
 import type { SwipeStore } from './useSwipes'
 import { useEffect, useState } from 'react'
 import { ProfileMaterials } from './ProfileMaterials'
 import {
-  simulateMatch,
+  loadJobDirectory,
+  loadCandidateJobMatches,
   profileRequest,
   type SavedProfile,
   type Candidate,
-  type CandidateProfile,
+  type JobMatch,
   type Company,
   type EvidenceTier,
   type Match,
@@ -90,9 +92,20 @@ export function TalentWorkspace({ candidateId, candidates, companies, skills, on
   const [profileBusy, setProfileBusy] = useState(false)
   const [profileAttempt, setProfileAttempt] = useState(0)
   const [skillToAdd, setSkillToAdd] = useState('')
-  const [openCompany, setOpenCompany] = useState<number | null>(null)
+  const [openJob, setOpenJob] = useState<number | null>(null)
   const [attempt, setAttempt] = useState(0)
-  const [result, setResult] = useState<{ candidateId: number; profile: CandidateProfile; companies: Company[]; attempt: number; matches: Match[]; failed: boolean }>()
+  const filters = useIndustryFilters(candidateId)
+  const [jobDirectory, setJobDirectory] = useState<Awaited<ReturnType<typeof loadJobDirectory>>>()
+  const [jobError, setJobError] = useState('')
+  const [result, setResult] = useState<{ profile: Candidate; attempt: number; matches: JobMatch[]; failed: boolean }>()
+  useEffect(() => {
+    const controller = new AbortController()
+    setJobError('')
+    loadJobDirectory(controller.signal).then((directory) => {
+      if (!controller.signal.aborted) setJobDirectory(directory)
+    }).catch(() => { if (!controller.signal.aborted) setJobError('Could not load job openings.') })
+    return () => controller.abort()
+  }, [attempt])
   const candidate = candidates.find(({ id }) => id === candidateId)
   const profile = savedProfile && savedProfile.candidate.id === candidateId ? savedProfile.candidate : undefined
   useEffect(() => {
@@ -106,31 +119,19 @@ export function TalentWorkspace({ candidateId, candidates, companies, skills, on
     })
     return () => controller.abort()
   }, [candidateId, profileAttempt])
-  const current = result?.profile === profile && result?.attempt === attempt && result.companies === companies ? result : undefined
+  const current = result?.profile === profile && result?.attempt === attempt ? result : undefined
   const busy = !current
 
   useEffect(() => {
     if (!profile || candidateId === undefined) return
     const controller = new AbortController()
-    const payload: CandidateProfile = {
-      has_cv: profile.has_cv,
-      has_portfolio: profile.has_portfolio,
-      languages: profile.languages,
-      needs_visa_sponsorship: profile.needs_visa_sponsorship,
-      skills: profile.skills,
-    }
-    Promise.all(companies.map(({ id }) => simulateMatch(id, payload, controller.signal)))
-      .then((matches) => {
-        if (!controller.signal.aborted) {
-          matches.sort((a, b) => Number(b.dealbreakers_passed) - Number(a.dealbreakers_passed) || b.total_score - a.total_score || a.company_id - b.company_id)
-          setResult({ candidateId, profile, companies, attempt, matches, failed: false })
-        }
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setResult({ candidateId, profile, companies, attempt, matches: [], failed: true })
-      })
+    loadCandidateJobMatches(candidateId, controller.signal).then((matches) => {
+      if (!controller.signal.aborted) setResult({ profile, attempt, matches, failed: false })
+    }).catch(() => {
+      if (!controller.signal.aborted) setResult({ profile, attempt, matches: [], failed: true })
+    })
     return () => controller.abort()
-  }, [profile, candidateId, companies, attempt])
+  }, [profile, candidateId, attempt])
 
   if (!candidate) return <p>Your demo candidate profile is unavailable. Log out and contact the demo operator.</p>
   if (!profile || !savedProfile) return <div role="status">{profileError || 'Loading your saved profile…'}{profileError && <button type="button" className="ml-3 underline" onClick={() => setProfileAttempt((value) => value + 1)}>Retry</button>}</div>
@@ -138,10 +139,13 @@ export function TalentWorkspace({ candidateId, candidates, companies, skills, on
   const skillNames = new Map(skills.map(({ id, name }) => [id, name]))
   const availableSkills = skills.filter(({ id }) => !profile.skills.some((skill) => skill.skill_id === id))
   const companyById = new Map(companies.map((company) => [company.id, company]))
-  const displayed = result?.candidateId === candidate.id ? result : undefined
-  const rows = displayed?.matches.length
-    ? displayed.matches.map((match) => ({ company: companyById.get(match.company_id)!, match }))
-    : companies.map((company) => ({ company, match: undefined }))
+  const jobs = jobDirectory?.jobs ?? []
+  const matchByJob = new Map(current?.matches.map((match) => [match.job_id, match]))
+  const visibleJobs = filterJobs(jobs, filters.selected).sort((a, b) => {
+    const x = matchByJob.get(a.id), y = matchByJob.get(b.id)
+    return Number(y?.dealbreakers_passed ?? false) - Number(x?.dealbreakers_passed ?? false) || (y?.total_score ?? 0) - (x?.total_score ?? 0) || a.id - b.id
+  })
+  const rows = visibleJobs.map((job) => ({ job, company: companyById.get(job.company_id), match: matchByJob.get(job.id) }))
   function acceptSaved(saved: SavedProfile) {
     setSavedProfile(saved)
     onSaved(saved.candidate)
@@ -159,18 +163,15 @@ export function TalentWorkspace({ candidateId, candidates, companies, skills, on
   const decisions = swipeStore.swipes.filter((row) => row.candidate_id === candidate.id)
   const own = decisions.filter((row) => row.actor === 'talent')
   const likedBy = new Set(decisions.filter((row) => row.actor === 'employer' && row.decision === 'like').map((row) => row.company_id))
-  const discoveryCards: DiscoveryCard[] = (current?.matches ?? []).filter((match) => !own.some((row) => row.company_id === match.company_id)).map((match) => {
-    const company = companyById.get(match.company_id)!
-    return {
-      id: company.id, name: company.name, subtitle: company.industry,
-      monogram: company.name.split(' ').slice(0, 2).map((word) => word[0]).join(''),
-      score: match.total_score, eligible: match.dealbreakers_passed && match.meets_threshold,
-      likedYou: likedBy.has(company.id),
-      facts: [`Booth ${company.booth_number}`, `${company.working_language} B2+`, company.relocation_support ? 'Relocation support' : 'No visa sponsorship'],
-      skills: [...company.must_have_skills, ...company.nice_to_have_skills].map(({ skill_id }) => ({ name: skillNames.get(skill_id) ?? `Skill ${skill_id}`, matched: profile.skills.some((skill) => skill.skill_id === skill_id) })),
-      warnings: [...match.dealbreaker_reasons, ...(!match.meets_threshold ? [`Below the ${match.min_match_threshold}% meeting threshold`] : [])],
-    }
-  })
+  const discoveryCards: DiscoveryCard[] = rows.filter(({ job, match }) => match && !own.some((row) => row.company_id === job.company_id)).map(({ job, company, match }) => ({
+    id: job.id, name: job.title, subtitle: `${job.company_name} · ${job.industry_label}`,
+    monogram: job.company_name.split(' ').slice(0, 2).map((word) => word[0]).join(''),
+    score: match!.total_score, eligible: match!.dealbreakers_passed && match!.meets_threshold,
+    likedYou: likedBy.has(job.company_id),
+    facts: [`Booth ${company?.booth_number ?? '—'}`, `${job.working_language} B2+`, job.relocation_support ? 'Relocation support' : 'No visa sponsorship'],
+    skills: [...job.must_have_skills.map((skill) => ({ ...skill, priority: 'Required' as const })), ...job.nice_to_have_skills.map((skill) => ({ ...skill, priority: 'Preferred' as const }))].map(({ skill_id, priority }) => ({ name: skillNames.get(skill_id) ?? `Skill #${skill_id}`, matched: profile.skills.some((skill) => skill.skill_id === skill_id), priority })),
+    warnings: [...match!.dealbreaker_reasons, ...(!match!.meets_threshold ? [`Below the ${job.min_match_threshold}% meeting threshold`] : [])],
+  }))
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(19rem,0.8fr)_minmax(0,1.4fr)]">
@@ -212,45 +213,49 @@ export function TalentWorkspace({ candidateId, candidates, companies, skills, on
         </ul>
       </section>
       <div className="order-first min-w-0 lg:order-none">
-        <div className="talent-view-toggle" aria-label="Employer discovery mode">
+        {jobDirectory && <IndustryFilters categories={jobDirectory.industries} selected={filters.selected} onChange={filters.update} />}
+        <p className="mb-3 text-xs text-slate-500">Likes and passes apply to the company across all its job openings.</p>
+        <div className="talent-view-toggle" aria-label="Job discovery mode">
           <button type="button" aria-pressed={view === 'swipe'} onClick={() => setView('swipe')}>✦ Swipe & connect</button>
-          <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}>All employers</button>
+          <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}>All jobs</button>
         </div>
-        {view === 'swipe' && <SwipeDeck key={candidate.id} cards={discoveryCards} loading={busy || !swipeStore.ready} error={swipeStore.error || (current?.failed ? 'Could not calculate your matches.' : '')}
+        {!jobDirectory && !jobError && <p role="status">Loading job openings…</p>}
+        {jobDirectory && !visibleJobs.length && !jobError && <JobEmptyState hasJobs={jobs.length > 0} />}
+        {view === 'swipe' && <SwipeDeck key={candidate.id} cards={discoveryCards} loading={busy || !jobDirectory || !swipeStore.ready} error={jobError || swipeStore.error || (current?.failed ? 'Could not calculate your matches.' : '')}
           onRetry={() => { swipeStore.retry(); setAttempt((value) => value + 1) }}
-          onUndo={(company_id) => swipeStore.undo({ candidate_id: candidate.id, company_id, actor: 'talent' })}
-          onDecide={(company_id, decision) => swipeStore.decide({ candidate_id: candidate.id, company_id, actor: 'talent', decision })}
-          saved={own.filter((row) => row.decision === 'like').map((row) => ({ id: row.company_id, name: companyById.get(row.company_id)?.name ?? 'Employer', mutual: likedBy.has(row.company_id) }))}
-          onReview={(id) => { setOpenCompany(id); setView('list') }} />}
+          onUndo={(jobId) => swipeStore.undo({ candidate_id: candidate.id, company_id: jobCompanyId(jobs, jobId), actor: 'talent' })}
+          onDecide={(jobId, decision) => swipeStore.decide({ candidate_id: candidate.id, company_id: jobCompanyId(jobs, jobId), actor: 'talent', decision })}
+          saved={own.filter((row) => row.decision === 'like').map((row) => ({ id: row.company_id, name: companyById.get(row.company_id)?.name ?? 'Employer', mutual: likedBy.has(row.company_id), reviewId: jobs.find((job) => job.company_id === row.company_id)?.id }))}
+          onReview={(id) => { setOpenJob(jobs.some((job) => job.id === id) ? id : null); if (!visibleJobs.some((job) => job.id === id)) filters.update([]); setView('list') }} />}
       <section hidden={view !== 'list'} aria-labelledby="matches-heading" className={`${panel} min-w-0 overflow-hidden`}>
         <div className="border-b border-slate-200 p-5 sm:p-6">
-          <h2 id="matches-heading" className="text-xl font-bold tracking-tight">Live employer matches</h2>
-          <p className="mt-1 text-sm text-slate-600">Sorted by match score. Select an employer to see the breakdown.</p>
+          <h2 id="matches-heading" className="text-xl font-bold tracking-tight">Live job matches</h2>
+          <p className="mt-1 text-sm text-slate-600">Sorted by match score. Select a job to see the breakdown.</p>
           <p role="status" className="mt-2 min-h-5 text-xs font-semibold text-espoo">
-            {busy ? 'Updating match scores…' : current.failed ? '' : `${current.matches.length} employers scored`}
+            {busy ? 'Updating match scores…' : current.failed ? '' : `${visibleJobs.length} jobs shown`}
           </p>
           {current?.failed && (
             <p role="alert" className="text-sm text-red-800">Could not refresh scores. <button type="button" className="cursor-pointer font-semibold underline" onClick={() => setAttempt((value) => value + 1)}>Retry</button></p>
           )}
         </div>
-        {rows.map(({ company, match }) => (
-          <div key={company.id}>
-            <button type="button" aria-expanded={openCompany === company.id} onClick={() => setOpenCompany(openCompany === company.id ? null : company.id)}
-              className={`flex w-full cursor-pointer items-center gap-3 border-b border-slate-100 px-4 py-4 text-left hover:bg-mist sm:gap-4 sm:px-6 ${openCompany === company.id ? 'bg-mist' : ''}`}>
-              <span className="shrink-0 rounded-lg bg-mist px-2 py-2 text-xs font-bold text-espoo">{company.booth_number}</span>
+        {rows.map(({ job, company, match }) => (
+          <div key={job.id}>
+            <button type="button" aria-expanded={openJob === job.id} onClick={() => setOpenJob(openJob === job.id ? null : job.id)}
+              className={`flex w-full cursor-pointer items-center gap-3 border-b border-slate-100 px-4 py-4 text-left hover:bg-mist sm:gap-4 sm:px-6 ${openJob === job.id ? 'bg-mist' : ''}`}>
+              <span className="shrink-0 rounded-lg bg-mist px-2 py-2 text-xs font-bold text-espoo">{company?.booth_number ?? '—'}</span>
               <span className="min-w-0 flex-1">
-                <span className="block font-semibold">{company.name}</span>
-                <span className="block text-xs leading-relaxed text-slate-600">{company.industry}</span>
+                <span className="block font-semibold">{job.title}</span>
+                <span className="block text-xs leading-relaxed text-slate-600">{job.company_name} · {job.industry_label}</span>
               </span>
               <span className={`shrink-0 text-lg font-bold tabular-nums text-espoo ${busy ? 'opacity-50' : ''}`}>{match ? `${format.format(match.total_score)}%` : '—'}</span>
-              <span aria-hidden="true" className="text-espoo">{openCompany === company.id ? '−' : '+'}</span>
+              <span aria-hidden="true" className="text-espoo">{openJob === job.id ? '−' : '+'}</span>
             </button>
-            {openCompany === company.id && match && (
-              <MatchBreakdown key={candidate.id} match={match} busy={busy} onClose={() => setOpenCompany(null)} />
+            {openJob === job.id && match && (
+              <div><div className="px-5"><JobRequirements job={job} skills={skills} /></div><MatchBreakdown key={job.id} match={match} busy={busy} onClose={() => setOpenJob(null)} /></div>
             )}
           </div>
         ))}
-        {companies.length === 0 && <p className="p-5 text-sm text-slate-600">No employers available.</p>}
+        {jobError && <p role="alert" className="p-5 text-sm text-red-800">{jobError} <button onClick={() => setAttempt((value) => value + 1)} className="underline">Retry</button></p>}
       </section>
       </div>
     </div>
