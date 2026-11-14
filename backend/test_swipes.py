@@ -113,6 +113,28 @@ class SwipeApiTests(unittest.IsolatedAsyncioTestCase):
         _, still_blocked = await self.request('POST', path, {'company_id': company['id'], 'candidate': profile})
         self.assertFalse(still_blocked['dealbreakers_passed'])
 
+    async def test_organizer_requires_evidence_not_swipe_interactions(self):
+        _, companies = await self.request('GET', '/api/companies')
+        for company in companies:
+            status, matches = await self.request('GET', f"/api/companies/{company['id']}/matches")
+            self.assertEqual(status, 200)
+            self.assertEqual(len(matches), 15)
+            self.assertFalse(any(m['dealbreakers_passed'] and m['meets_threshold'] for m in matches))
+        # Existing demo persona 402 has the language and skill claims for company 1.
+        # Attach synthetic project proof to its three actual must-have skills.
+        company = companies[0]
+        for skill in company['must_have_skills']:
+            status, _ = await self.request('POST', '/api/candidates/402/links', {
+                'category': 'project', 'title': 'Synthetic hackathon project',
+                'url': 'https://example.com/synthetic-project', 'skill_id': skill['skill_id'],
+            })
+            self.assertEqual(status, 200)
+        _, matches = await self.request('GET', '/api/companies/1/matches')
+        match = next(m for m in matches if m['candidate_id'] == 402)
+        self.assertEqual(match['total_score'], 75)
+        self.assertTrue(match['dealbreakers_passed'] and match['meets_threshold'])
+        self.assertEqual((await self.request('GET'))[1], [])  # no swipes/likes needed
+
     async def test_invalid_votes_do_not_write(self):
         for field, value, expected in [('actor', 'unknown', 422), ('decision', 'yes', 422), ('candidate_id', -1, 422), ('candidate_id', 99999, 404), ('company_id', 99999, 404)]:
             with self.subTest(field=field, value=value):
