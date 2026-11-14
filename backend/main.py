@@ -22,6 +22,7 @@ from .models import (
     SwipeDecision,
 )
 from .profile_materials import candidate_profile, router as profile_router
+from .hosting import configure_hosting, initialize_demo
 
 COMPANY_JSON_FIELDS = ("must_have_skills", "nice_to_have_skills")
 CANDIDATE_JSON_FIELDS = ("languages", "skills")
@@ -35,6 +36,7 @@ async def lifespan(app: FastAPI):
             "UPDATE skills SET name = ? WHERE name = ?",
             ("Quantum circuit programming with Qiskit", "Quantum Computing"),
         )
+    initialize_demo()
     yield
 
 
@@ -313,3 +315,13 @@ def undo_swipe(actor: Literal['talent', 'employer'], candidate_id: PositiveId, c
             (actor, candidate_id, company_id),
         )
     return {'deleted': True}
+
+
+@app.get("/healthz", include_in_schema=False)
+def health():
+    with connect() as connection:
+        connection.execute("SELECT id FROM candidates LIMIT 1").fetchone()
+    return {"status": "ok"}
+
+
+configure_hosting(app)

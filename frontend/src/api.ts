@@ -85,7 +85,7 @@ export interface Match {
   improvement_hints: ImprovementHint[]
 }
 
-const apiUrl = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').replace(/\/$/, '')
+const apiUrl = (import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://127.0.0.1:8000' : '')).replace(/\/$/, '')
 
 export type MaterialCategory = 'cv' | 'project' | 'certificate' | 'research' | 'linkedin' | 'github' | 'website'
 export interface ProfileMaterial {

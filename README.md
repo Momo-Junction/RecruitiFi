@@ -25,6 +25,15 @@ pnpm dev
 
 Open the [event directory](http://localhost:5173/) or [interactive API docs](http://127.0.0.1:8000/docs). Run `pnpm build` from `frontend` to type-check and build the app.
 
+## Deploy the shared demo
+
+1. In the [Render dashboard](https://dashboard.render.com/), choose **New → Blueprint**, connect `Momo-Junction/RecruitiFi`, and select `main`.
+2. Enter a strong `TALENTMATCH_DEMO_PASSWORD` when prompted and review the cost of the paid web service and persistent disk before creating the resources.
+3. Open the HTTPS URL Render assigns. Sign in with username `demo` and the password you set. The same service hosts the UI and API. The first startup seeds synthetic data, and subsequent starts use the database on `/var/data`.
+4. Upload a synthetic PDF, download it, restart the service, and confirm it is still available. Check a swipe and undo, employer scoring, and the organizer view before sharing the URL.
+
+The shared password gives viewers access to all demo personas. Use synthetic documents for this deployment.
+
 ## API and data
 
 Talent profiles have dedicated sections for CVs, projects, certificates, research, LinkedIn, GitHub and personal websites. Uploaded PDF, PNG and JPEG files (up to 10 MB each) and link metadata are stored in SQLite. Downloading a document returns it as an attachment.
