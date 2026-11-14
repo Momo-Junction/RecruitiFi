@@ -1,0 +1,4 @@
+IMAGE                          ID             DISK USAGE   CONTENT SIZE   EXTRA
+recruitifi:minilm-amd64-int8   7488e8c2efb5        496MB          128MB   U    
+└─ linux/amd64                 eb178a14a9dc        496MB          128MB   U    
+
