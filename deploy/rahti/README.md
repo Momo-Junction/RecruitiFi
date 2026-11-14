@@ -786,3 +786,40 @@ can alternatively use the existing binary BuildConfig flow documented above;
 choose one build/publish method per release. To restore authentication later:
 `oc set env deployment/recruitifi TALENTMATCH_DEMO_AUTH_ENABLED=true`, with the
 existing nonblank password Secret retained. This rolls the Pod without removing data.
+
+## Installing interest notifications (additive migration)
+
+Back up the existing SQLite event using the earlier procedure before updating.
+The new image's startup adds only the notifications table and indexes, and
+backfills notification state from existing likes. It never resets the event or
+uploaded documents. Keep the existing one-replica/Recreate deployment and PVC.
+Existing active read state is unchanged on repeated startup. There is no separate
+migration job, volume, dependency or notification service.
+
+Notifications are scoped by selected demo candidate/company IDs. This is not
+secure per-user authorization. With public demo access, all notification endpoints
+are also public, just like the existing synthetic profiles and swipe endpoints.
+Use synthetic data only. Organizer rules and compatibility scores are unaffected.
+
+Future operator commands (not executed during implementation):
+
+```sh
+oc project  # Verify this is the existing demo project before continuing.
+NS=$(oc project -q)
+TAG="notifications-$(date -u +%Y%m%dT%H%M%SZ)"
+REGISTRY=image-registry.apps.2.rahti.csc.fi
+oc whoami -t | docker login --username unused --password-stdin "$REGISTRY"
+docker buildx build --platform linux/amd64 --push \
+  -t "$REGISTRY/$NS/recruitifi:$TAG" .
+oc set image deployment/recruitifi \
+  recruitifi="image-registry.openshift-image-registry.svc:5000/$NS/recruitifi:$TAG"
+oc rollout status deployment/recruitifi --timeout=180s
+oc logs deployment/recruitifi --tail=50
+```
+
+This retains the Secret, public/protected demo flag and PVC. Recreate restarts the
+application automatically; no extra restart, reseed or storage recreation is
+required. Keep an external verified backup for recovery; do not assume reverting
+an image reverts persistent data. Older application versions ignore the additive
+notification table. Validate both like orders, the Interested badge, read status,
+withdrawal and cross-session polling after the authorized rollout.
