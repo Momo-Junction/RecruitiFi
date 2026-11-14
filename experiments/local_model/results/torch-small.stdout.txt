@@ -1,0 +1,4 @@
+torch: short batch=1 tokens=13 median=4.257 ms peak=384.6 MiB
+torch: short batch=3 tokens=13 median=5.341 ms peak=384.6 MiB
+torch: max_256_tokens batch=1 tokens=256 median=21.904 ms peak=389.3 MiB
+torch: max_256_tokens batch=3 tokens=256 median=60.520 ms peak=395.1 MiB
