@@ -88,7 +88,7 @@ export interface Match {
   improvement_hints: ImprovementHint[]
 }
 
-const apiUrl = (import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://127.0.0.1:8000')).replace(/\/$/, '')
+const apiUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
 export async function demoFetch(url: string, options: RequestInit = {}) {
   const account = readDemoAccount()
@@ -233,12 +233,20 @@ export interface HiringTask {
 }
 
 export function loadHiringTasks(signal: AbortSignal) {
-  return get<HiringTask[]>('hiring-tasks', signal)
+  return demoFetch('/api/hiring-tasks',{signal,credentials:'same-origin'}).then(async response=>{
+    if(!response.ok)throw new Error(`Could not load hiring tasks (${response.status}). Sign in again if your session expired.`)
+    return response.json() as Promise<HiringTask[]>
+  })
 }
 
 export async function writeHiringTask(path: string, method: 'POST' | 'PUT', body?: object): Promise<HiringTask> {
-  const response = await demoFetch(apiUrl + '/api/hiring-tasks' + path, {
-    method, headers: { 'Content-Type': 'application/json' }, body: body && JSON.stringify(body),
+  const session=await demoFetch('/api/evidence-session',{credentials:'same-origin',cache:'no-store'})
+  if(!session.ok)throw new Error('Sign in through the main account screen to manage hiring tasks.')
+  const identity=await session.json()
+  const selected=readDemoAccount()
+  if(!selected || identity.account_id!==selected.demo_account_id || typeof identity.csrf!=='string')throw new Error('Verify your selected account by signing in again.')
+  const response = await demoFetch('/api/hiring-tasks' + path, {
+    method, credentials:'same-origin', headers: { 'Content-Type': 'application/json','X-Recruitifi-CSRF':identity.csrf }, body: body && JSON.stringify(body),
   })
   if (!response.ok) {
     const result = await response.json().catch(() => ({}))
