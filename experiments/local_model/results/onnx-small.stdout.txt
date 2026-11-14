@@ -1,0 +1,4 @@
+onnx: short batch=1 tokens=13 median=4.513 ms peak=210.7 MiB
+onnx: short batch=3 tokens=13 median=11.975 ms peak=210.7 MiB
+onnx: max_256_tokens batch=1 tokens=256 median=79.722 ms peak=226.0 MiB
+onnx: max_256_tokens batch=3 tokens=256 median=239.014 ms peak=226.0 MiB
