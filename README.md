@@ -109,3 +109,18 @@ password configuration stops startup; invalid request credentials return 401.
 shared access is not a candidate account/ownership system. Local development is
 unchanged when hosted mode is unset or 0. Actual Rahti SCC, PVC and HTTPS operation
 still require a later authorized cluster test. Render deployment settings are in `render.yaml`.
+
+## Hackathon public access and Organizer suggestions
+
+Hosted authentication is enabled by default. Explicitly set
+`TALENTMATCH_DEMO_AUTH_ENABLED=false` for password-free public access; use `true`
+or omit it to require the existing shared password. Keep the Secret for later use.
+Public access also permits shared data changes and document access: synthetic data
+only. See [the hackathon runbook](deploy/rahti/README.md#optional-password-free-hackathon-mode)
+for safe update commands and a legitimate Organizer demonstration.
+
+A freshly seeded event has no saved proof materials, so legacy skills receive
+self-declared evidence and no CV/portfolio points. Scores remain below the seeded
+thresholds. Organizer suggestions require skill/language/visa eligibility and the
+employer threshold, not likes or swipes. Add supporting synthetic materials and
+refresh suggestions; do not lower thresholds to manufacture introductions.
