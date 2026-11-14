@@ -123,7 +123,7 @@ export function App() {
     return () => controller.abort()
   }, [attempt])
   useEffect(() => {
-    if (!privateLogin || !account || account.role === 'organizer') return
+    if (!privateLogin || !account) return
     const controller = new AbortController()
     fetch('/api/evidence-session', { credentials: 'same-origin', cache: 'no-store', signal: controller.signal }).then(async response => {
       const identity = response.ok ? await response.json() : null
@@ -148,7 +148,7 @@ export function App() {
   function logout() { selectAccount(null); setRole(null); setChoice(''); setPassword(''); setVerified('') }
   // Key the whole dashboard, including directory, pending profiles and swipe state.
   // No personal requests are made until the stored identity matches the server catalog.
-  if (privateLogin !== undefined && account && valid && selected && catalog && (!privateLogin || selected.role === 'organizer' || verified === selected.demo_account_id)) return <DemoDashboard key={selected.demo_account_id} account={selected} catalog={catalog} logout={logout} />
+  if (privateLogin !== undefined && account && valid && selected && catalog && (!privateLogin || verified === selected.demo_account_id)) return <DemoDashboard key={selected.demo_account_id} account={selected} catalog={catalog} logout={logout} />
   const choices = catalog?.accounts.filter((item) => item.role === role) ?? []
   const chosen = choices.find((item) => item.demo_account_id === choice)
   return <div className="min-h-screen bg-[#f6f8fc] text-ink">
@@ -172,7 +172,7 @@ export function App() {
             if (!chosen?.available || privateLogin === undefined || signingIn) return
             setSigningIn(true); setError('')
             try {
-              if (privateLogin && chosen.role !== 'organizer') { await loginAccount(chosen.demo_account_id, password); setVerified(chosen.demo_account_id) }
+              if (privateLogin) { await loginAccount(chosen.demo_account_id, password); setVerified(chosen.demo_account_id) }
               selectAccount(chosen)
             } catch (cause) { setError((cause as Error).message) }
             finally { setPassword(''); setSigningIn(false) }
@@ -184,7 +184,7 @@ export function App() {
               </select>
             </label>
             {choices.filter((item) => !item.available).map((item) => <p key={item.demo_account_id} role="alert" className="mt-2 text-sm text-red-800">{item.error}</p>)}
-            {privateLogin && role !== 'organizer' && <label className="mt-3 grid gap-2 text-sm font-semibold">Account password<input required type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2" /></label>}
+            {privateLogin && <label className="mt-3 grid gap-2 text-sm font-semibold">Account password<input required type="password" autoComplete="current-password" value={password} onChange={event => setPassword(event.target.value)} className="rounded-lg border border-slate-300 px-3 py-2" /></label>}
             <button type="submit" disabled={!chosen?.available || privateLogin === undefined || signingIn} className="mt-4 rounded-lg bg-espoo px-4 py-3 font-semibold text-white enabled:cursor-pointer disabled:opacity-50">{signingIn ? 'Signing in…' : 'Enter Dashboard'}</button>
           </form>}
         </>}
