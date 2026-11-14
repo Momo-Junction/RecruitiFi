@@ -91,9 +91,22 @@ try:
     download = f'/api/candidates/{candidate_id}/documents/{material_id}'
     assert request(base, download)[0] == document
     docker('exec', name, 'python', '-c', 'from backend.database import DB_PATH; assert str(DB_PATH) == "/var/data/talentmatch.sqlite3"; assert DB_PATH.is_file()')
+    for actor in ['talent', 'employer']:
+        req = urllib.request.Request(base + '/api/swipes', data=json.dumps({'candidate_id': candidate_id, 'company_id': 1, 'actor': actor, 'decision': 'like'}).encode(), method='PUT', headers={'Content-Type': 'application/json'})
+        with urllib.request.urlopen(req) as response:
+            result = json.load(response)
+            assert result['mutual_match'] == (actor == 'employer')
+    inbox_path = f'/api/notifications/talent/{candidate_id}'
+    inbox = json.loads(request(base, inbox_path)[0])
+    assert len(inbox['entries']) == 1 and inbox['entries'][0]['kind'] == 'match'
+    notification_id = inbox['entries'][0]['id']
+    assert json.loads(request(base, inbox_path + f'/{notification_id}/read', method='PUT')[0])['unread_count'] == 0
     docker('stop', '--time', '40', name)
     assert docker('inspect', '-f', '{{.State.ExitCode}}', name) == '0'
     name, base = start('-second', 1000620001)
+    restored_inbox = json.loads(request(base, inbox_path)[0])
+    assert restored_inbox['entries'][0]['id'] == notification_id and restored_inbox['unread_count'] == 0
+    assert json.loads(request(base, '/api/notifications/employer/1')[0])['unread_count'] == 1
     assert request(base, download)[0] == document
     assert len(json.loads(request(base, '/api/candidates')[0])) == len(candidates)
     # Write after UID change: test group permissions, not just read persistence.
@@ -105,7 +118,7 @@ try:
     # Reuse the same synthetic event in hosted mode: authentication must protect
     # frontend, assets, APIs, documentation and persisted document downloads.
     name, base = start('-hosted', 1000620002, hosted=True)
-    for path in ['/', '/talent', '/employer', '/organizer', script, '/api/companies', '/api/candidates', download, '/docs', '/openapi.json']:
+    for path in ['/', '/talent', '/employer', '/organizer', script, '/api/companies', '/api/candidates', download, inbox_path, '/docs', '/openapi.json']:
         for header in [None, 'Basic !!!', 'Basic ' + base64.b64encode(('demo:' + secrets.token_urlsafe(24)).encode()).decode(),
                        'Basic ' + base64.b64encode(('other:' + DEMO_PASSWORD).encode()).decode()]:
             try:
