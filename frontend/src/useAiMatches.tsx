@@ -1,15 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { readDemoAccount } from './demoNavigation'
 
-export type AiMatch = { status: string; score: number | null; requirements: { skill_id: number; skill_name: string; status: string; excerpt: string | null; material_id: number | null; coverage: number }[] }
+export type AiMatch = { display_score?:number; profile_bonus?:number; bonus_reason?:string|null; status: string; score: number | null; requirements: { skill_id: number; skill_name: string; status: string; excerpt: string | null; material_id: number | null; coverage: number }[] }
 type Profile = { public_profile_retrieval_enabled?:boolean; status: string; matches: Record<string, AiMatch>; detail?: string | null; sources?: {material_id:number; category:string; content_status:string; detail?:string}[] }
 const active = (status: string) => ['queued', 'running', 'pending'].includes(status)
+export function displayAiScore(match?:AiMatch):number|null {
+  const score=match?.display_score ?? match?.score
+  return typeof score==='number' && Number.isFinite(score) && score>=0 && score<=100 ? score:null
+}
 export function aiLabel(match?: AiMatch) {
-  return match?.status === 'completed' && typeof match.score === 'number' && Number.isFinite(match.score) ? `${match.score.toFixed(1)}% AI evidence fit` : ['unavailable','failed','timed_out','interrupted','cancelled'].includes(match?.status ?? '') ? 'AI score unavailable' : active(match?.status ?? '') ? 'Analyzing…' : 'Not analyzed'
+  const score=displayAiScore(match)
+  return match?.status === 'completed' && score!==null ? `${score.toFixed(1)}% ${match.profile_bonus ? 'combined fit' : 'AI evidence fit'}` : ['unavailable','failed','timed_out','interrupted','cancelled'].includes(match?.status ?? '') ? 'AI score unavailable' : active(match?.status ?? '') ? 'Analyzing…' : 'Not analyzed'
 }
 export function AiExplanation({ match }: { match?: AiMatch }) {
   return <section className="mt-3 text-xs" aria-label="AI match explanation">
     <p className="font-semibold">{aiLabel(match)}</p>
+    {match?.profile_bonus ? <p>MiniLM evidence score: {match.score?.toFixed(1)}%. LinkedIn profile-completion bonus: +{match.profile_bonus} points (capped at 100). LinkedIn content was not fetched or verified.</p> : null}
     <p>Weighted semantic evidence coverage · unreviewed. Not proficiency or a hiring probability. Analysis uses a bounded sample of approved evidence.</p>
     {(match?.requirements ?? []).map(r => <div key={r.skill_id} className="mt-2"><strong>{r.skill_name}</strong> · {r.status === 'supported' ? 'Relevant evidence' : r.status === 'claimed_only' ? 'Claimed only · no supporting evidence found' : 'Missing supporting evidence'}{r.excerpt && <blockquote className="border-l-2 pl-2">{r.excerpt}</blockquote>}{r.material_id && <p>Source material #{r.material_id}</p>}</div>)}
   </section>
@@ -61,6 +67,7 @@ export async function loadAiProfile(candidateId: number, signal?: AbortSignal): 
   if (!data || typeof data.status !== 'string' || !data.matches || typeof data.matches !== 'object' || Array.isArray(data.matches)) throw new Error('Invalid analysis response. No scores were accepted.')
   for (const match of Object.values(data.matches) as AiMatch[]) {
     if (!match || typeof match.status !== 'string' || (match.score !== null && (typeof match.score !== 'number' || !Number.isFinite(match.score) || match.score < 0 || match.score > 100)) || !Array.isArray(match.requirements) || match.requirements.length > 100) throw new Error('Invalid analysis response. No scores were accepted.')
+    if(match.display_score!==undefined && (typeof match.display_score!=='number' || !Number.isFinite(match.display_score) || match.display_score<0 || match.display_score>100 || ![0,2].includes(match.profile_bonus??0) || match.score===null || Math.abs(match.display_score-Math.min(100,match.score+(match.profile_bonus??0)))>0.001))throw new Error('Invalid profile bonus response.')
     for (const r of match.requirements) {
       if (!r || !Number.isInteger(r.skill_id) || r.skill_id < 1 || typeof r.skill_name !== 'string' || typeof r.status !== 'string' || (r.excerpt !== null && (typeof r.excerpt !== 'string' || r.excerpt.length > 160)) || (r.material_id !== null && (!Number.isInteger(r.material_id) || r.material_id < 1))) throw new Error('Invalid evidence attribution. No scores were accepted.')
     }
