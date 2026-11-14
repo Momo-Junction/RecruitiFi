@@ -141,3 +141,26 @@ test('a wrong profile in a successful API response is rejected rather than rende
   try { await assert.rejects(api.profileRequest(402), /different demo profile/) }
   finally { globalThis.fetch = original }
 })
+test('private task writes require the matching session and CSRF over the Vite same-origin proxy',async()=>{
+ const previousWindow=globalThis.window,previousFetch=globalThis.fetch
+ const calls=[]
+ globalThis.window=browser('/',accounts[2])
+ globalThis.fetch=async(url,options)=>{
+  calls.push([url,options])
+  return new Response(JSON.stringify(url.endsWith('/evidence-session')?{account_id:'employer-001',csrf:'synthetic-csrf'}:{id:1}))
+ }
+ try{
+  await api.writeHiringTask('','POST',{company_id:1,candidate_id:402,title:'Synthetic'})
+  assert.equal(calls[0][0],'/api/evidence-session')
+  assert.equal(calls[1][0],'/api/hiring-tasks')
+  assert.equal(calls[1][1].headers.get('X-Recruitifi-CSRF'),'synthetic-csrf')
+  assert.equal(calls[1][1].credentials,'same-origin')
+  calls.length=0
+  globalThis.fetch=async(url,options)=>{calls.push([url,options]);return new Response(JSON.stringify({account_id:'employer-002',csrf:'synthetic-csrf'}))}
+  await assert.rejects(api.writeHiringTask('','POST',{}),/selected account/)
+  assert.equal(calls.length,1)
+ }finally{
+  if(previousWindow===undefined)delete globalThis.window;else globalThis.window=previousWindow
+  globalThis.fetch=previousFetch
+ }
+})
