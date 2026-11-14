@@ -1,10 +1,12 @@
 import json
 import os
+from pathlib import Path
 from typing import Literal
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .database import SCHEMA_PATH, connect
 from .matching_engine import LANGUAGE_LEVELS, SCORING_VERSION, calculate_match
@@ -313,3 +315,14 @@ def undo_swipe(actor: Literal['talent', 'employer'], candidate_id: PositiveId, c
             (actor, candidate_id, company_id),
         )
     return {'deleted': True}
+
+
+@app.get("/healthz", include_in_schema=False)
+def healthz():
+    return {"status": "ok"}
+
+
+# Container builds supply these assets; local Vite development is unchanged.
+_frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+if (_frontend_dist / "index.html").is_file():
+    app.mount("/", StaticFiles(directory=_frontend_dist, html=True), name="frontend")
