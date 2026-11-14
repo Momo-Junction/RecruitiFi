@@ -59,3 +59,21 @@ jobs:
         run: npm ci
       - name: Type-check and build frontend
         run: npm run build
+
+  container:
+    name: Container build and non-root persistence checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Set up test driver
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Build amd64 image (no push or deployment)
+        run: docker build --platform linux/amd64 -t recruitifi:ci .
+      - name: Test non-root runtime and synthetic data persistence
+        run: python deploy/rahti/test_container.py recruitifi:ci
