@@ -1,3 +1,5 @@
+import { readDemoAccount, requireDemoOwner, type DemoAccount } from './demoNavigation'
+
 export interface Skill {
   id: number
   esco_uri: string
@@ -87,6 +89,21 @@ export interface Match {
 
 const apiUrl = (import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://127.0.0.1:8000')).replace(/\/$/, '')
 
+export async function demoFetch(url: string, options: RequestInit = {}) {
+  const account = readDemoAccount()
+  const headers = new Headers(options.headers)
+  if (account) headers.set('X-Recruitifi-Demo-Account', account.demo_account_id)
+  return fetch(url, { ...options, cache: 'no-store', headers })
+}
+export interface DemoCatalog {
+  accounts: DemoAccount[]
+  candidate_count: number
+  company_count: number
+}
+export function loadDemoAccounts(signal: AbortSignal) {
+  return get<DemoCatalog>('demo/accounts', signal)
+}
+
 export type MaterialCategory = 'cv' | 'project' | 'certificate' | 'research' | 'linkedin' | 'github' | 'website'
 export interface ProfileMaterial {
   id: number
@@ -105,16 +122,19 @@ export function documentUrl(candidateId: number, id: number) {
   return `${apiUrl}/api/candidates/${candidateId}/documents/${id}`
 }
 export async function profileRequest(candidateId: number, path = 'profile', options?: RequestInit): Promise<SavedProfile> {
-  const response = await fetch(`${apiUrl}/api/candidates/${candidateId}/${path}`, options)
+  requireDemoOwner('talent', candidateId)
+  const response = await demoFetch(`${apiUrl}/api/candidates/${candidateId}/${path}`, options)
   if (!response.ok) {
     const body = await response.json().catch(() => ({}))
     throw new Error(typeof body.detail === 'string' ? body.detail : 'Could not save the profile. Check your entries and try again.')
   }
-  return response.json()
+  const saved: SavedProfile = await response.json()
+  if (saved.candidate?.id !== candidateId) throw new Error('The API returned a different demo profile. No profile was loaded.')
+  return saved
 }
 
 async function get<T>(resource: string, signal: AbortSignal): Promise<T> {
-  const response = await fetch(`${apiUrl}/api/${resource}`, { signal })
+  const response = await demoFetch(`${apiUrl}/api/${resource}`, { signal })
   if (!response.ok) throw new Error(`Could not load ${resource} (${response.status}).`)
   return response.json()
 }
@@ -129,7 +149,7 @@ export async function loadDirectory(signal: AbortSignal) {
 }
 
 export async function simulateMatch(companyId: number, candidate: CandidateProfile, signal: AbortSignal): Promise<Match> {
-  const response = await fetch(`${apiUrl}/api/match/simulate`, {
+  const response = await demoFetch(`${apiUrl}/api/match/simulate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ company_id: companyId, candidate }),
@@ -144,17 +164,21 @@ export async function loadCompanyMatches(companyId: number, signal: AbortSignal)
 }
 
 export async function saveCompanyRole(companyId: number, role: CompanyRole): Promise<Company> {
-  const response = await fetch(`${apiUrl}/api/companies/${companyId}/role`, {
+  requireDemoOwner('employer', companyId)
+  const response = await demoFetch(`${apiUrl}/api/companies/${companyId}/role`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(role),
   })
   if (!response.ok) throw new Error('Could not save the role. Check the selected skills and try again.')
-  return response.json()
+  const saved: Company = await response.json()
+  if (saved.id !== companyId) throw new Error('The API returned a different demo company. No company was loaded.')
+  return saved
 }
 
 export async function acceptCompanyMeeting(companyId: number, anonymousCode: string, humanReviewed = false): Promise<MeetingContact> {
-  const response = await fetch(
+  requireDemoOwner('employer', companyId)
+  const response = await demoFetch(
     `${apiUrl}/api/companies/${companyId}/matches/${encodeURIComponent(anonymousCode)}/accept?human_reviewed=${humanReviewed}`,
     { method: 'POST' },
   )
@@ -176,7 +200,8 @@ export function loadSwipes(signal: AbortSignal) {
 }
 
 export async function saveSwipe(swipe: SwipeDecision): Promise<SwipeDecision & { mutual_match: boolean }> {
-  const response = await fetch(`${apiUrl}/api/swipes`, {
+  requireDemoOwner(swipe.actor, swipe.actor === 'talent' ? swipe.candidate_id : swipe.company_id)
+  const response = await demoFetch(`${apiUrl}/api/swipes`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(swipe),
   })
   if (!response.ok) throw new Error('Could not save your swipe. Please try again.')
@@ -184,7 +209,8 @@ export async function saveSwipe(swipe: SwipeDecision): Promise<SwipeDecision & {
 }
 
 export async function undoSwipe(swipe: Pick<SwipeDecision, 'actor' | 'candidate_id' | 'company_id'>) {
-  const response = await fetch(`${apiUrl}/api/swipes/${swipe.actor}/${swipe.candidate_id}/${swipe.company_id}`, { method: 'DELETE' })
+  requireDemoOwner(swipe.actor, swipe.actor === 'talent' ? swipe.candidate_id : swipe.company_id)
+  const response = await demoFetch(`${apiUrl}/api/swipes/${swipe.actor}/${swipe.candidate_id}/${swipe.company_id}`, { method: 'DELETE' })
   if (!response.ok) throw new Error('Could not undo your swipe. Please try again.')
 }
 
@@ -202,11 +228,13 @@ export interface NotificationInbox {
   entries: DemoNotification[]
   unread_count: number
 }
-export function loadNotifications(recipient: DemoNotification['recipient'], identityId: number, signal: AbortSignal) {
+export async function loadNotifications(recipient: DemoNotification['recipient'], identityId: number, signal: AbortSignal) {
+  requireDemoOwner(recipient, identityId)
   return get<NotificationInbox>(`notifications/${recipient}/${identityId}`, signal)
 }
 export async function markNotificationRead(recipient: DemoNotification['recipient'], identityId: number, id: number) {
-  const response = await fetch(`${apiUrl}/api/notifications/${recipient}/${identityId}/${id}/read`, { method: 'PUT' })
+  requireDemoOwner(recipient, identityId)
+  const response = await demoFetch(`${apiUrl}/api/notifications/${recipient}/${identityId}/${id}/read`, { method: 'PUT' })
   if (!response.ok) throw new Error('Could not mark notification as read.')
   return response.json() as Promise<NotificationInbox>
 }
