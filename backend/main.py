@@ -29,6 +29,7 @@ from .models import (
 )
 from .profile_materials import candidate_profile, router as profile_router
 from .hosting import initialize_demo
+from .jobs import router as jobs_router
 from .notifications import initialize_notifications, reconcile_pair, router as notifications_router
 
 COMPANY_JSON_FIELDS = ("must_have_skills", "nice_to_have_skills")
@@ -55,6 +56,7 @@ async def lifespan(app: FastAPI):
 # Validate hosted configuration before Uvicorn can accept requests, including direct launches.
 hosted_password()
 app = FastAPI(title="City of Espoo TalentMatch", lifespan=lifespan, dependencies=[Depends(guard_demo_identity)])
+app.include_router(jobs_router)
 app.include_router(demo_accounts_router)
 app.include_router(profile_router)
 app.include_router(notifications_router)
