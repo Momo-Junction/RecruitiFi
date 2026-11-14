@@ -124,3 +124,26 @@ self-declared evidence and no CV/portfolio points. Scores remain below the seede
 thresholds. Organizer suggestions require skill/language/visa eligibility and the
 employer threshold, not likes or swipes. Add supporting synthetic materials and
 refresh suggestions; do not lower thresholds to manufacture introductions.
+
+## Demo role selection
+
+The welcome page at `/` offers Talent, Employer and Espoo Organizer demo entries.
+Each choice opens the existing dashboard at `/talent`, `/employer` or `/organizer`.
+Only the selected dashboard mounts; its old cross-role tabs are replaced with a
+Switch Role button. Selection is stored in sessionStorage for that browser tab.
+Refresh and browser Back/Forward preserve the navigation rules; opening a different
+dashboard URL redirects to the selected role, or to `/` when no role is selected.
+Switch Role clears the selection. If browser storage is blocked, in-page selection
+still works but cannot survive a refresh.
+
+These are frontend demo navigation choices, not secure role permissions or new
+accounts. The existing hosted authentication/public-mode configuration is unchanged.
+FastAPI serves the React entry point for only the three dashboard routes; missing
+API endpoints and missing assets still return 404. No dashboard, matching logic,
+SQLite schema, deployment resources or persistent data were changed for this flow.
+
+Run `npm test` and `npm run build` in `frontend` for navigation/rendering regressions
+and TypeScript/production validation. The existing container checks additionally
+test deep links in hosted mode. Rebuild the image and update the existing Deployment
+using [the Rahti runbook](deploy/rahti/README.md#local-verification-and-later-safe-update).
+Keep the existing PVC; do not reseed the deployed event or recreate its storage.
