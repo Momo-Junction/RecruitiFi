@@ -1,4 +1,5 @@
 import { SwipeDeck, type DiscoveryCard } from './SwipeDeck'
+import { EmployerTasks } from './HiringTasks'
 import type { SwipeStore } from './useSwipes'
 import { useEffect, useState } from 'react'
 import {
@@ -180,7 +181,7 @@ export function EmployerWorkspace({ companies, skills, candidates, onCompanySave
   companies: Company[]; skills: Skill[]; candidates: Candidate[]; onCompanySaved: (company: Company) => void
   swipeStore: SwipeStore
 }) {
-  const [view, setView] = useState<'swipe' | 'queue'>('swipe')
+  const [view, setView] = useState<'swipe' | 'queue' | 'shortlist'>('swipe')
   const [companyId, setCompanyId] = useState(companies[0]?.id)
   const [editing, setEditing] = useState(false)
   const [showAll, setShowAll] = useState(false)
@@ -205,13 +206,13 @@ export function EmployerWorkspace({ companies, skills, candidates, onCompanySave
 
   if (!company) return <p>No employers available.</p>
   const visibleMatches = current?.matches.filter((match) => showAll || (match.dealbreakers_passed && match.meets_threshold)) ?? []
-  const decisions = swipeStore.swipes.filter((row) => row.company_id === company.id)
-  const own = decisions.filter((row) => row.actor === 'employer')
-  const likedBy = new Set(decisions.filter((row) => row.actor === 'talent' && row.decision === 'like').map((row) => row.candidate_id))
+  const own = swipeStore.swipes.filter((row) => row.company_id === company.id && row.actor === 'employer')
+  const interested = new Set(swipeStore.swipes.filter((row) => row.company_id === company.id && row.actor === 'talent' && row.decision === 'like').map((row) => row.candidate_id))
+  const shortlisted = own.filter((row) => row.decision === 'like')
   const cards: DiscoveryCard[] = (current?.matches ?? []).filter((match) => !own.some((row) => row.candidate_id === match.candidate_id)).map((match) => ({
     id: match.candidate_id, name: match.anonymous_code, subtitle: 'Talent in Espoo · identity stays private',
     monogram: match.anonymous_code.slice(-2), score: match.total_score,
-    eligible: match.dealbreakers_passed && match.meets_threshold, likedYou: likedBy.has(match.candidate_id),
+    eligible: match.dealbreakers_passed && match.meets_threshold, likedYou: interested.has(match.candidate_id),
     facts: [match.dealbreakers_passed ? 'Language & visa compatible' : 'Check role requirements', `${company.min_match_threshold}% meeting threshold`],
     skills: [...match.must_have_skills, ...match.nice_to_have_skills].map((skill) => ({ name: skill.skill_name, matched: skill.evidence_tier !== 'missing' })),
     warnings: [...match.dealbreaker_reasons, ...(!match.meets_threshold ? ['Below your meeting threshold'] : [])],
@@ -241,15 +242,32 @@ export function EmployerWorkspace({ companies, skills, candidates, onCompanySave
       </div>
       <div className="order-first min-w-0 lg:order-none">
         <div className="talent-view-toggle" aria-label="Talent discovery mode">
-          <button type="button" aria-pressed={view === 'swipe'} onClick={() => setView('swipe')}>✦ Discover talent</button>
+          <button type="button" aria-pressed={view === 'swipe'} onClick={() => setView('swipe')}>Discover talent</button>
           <button type="button" aria-pressed={view === 'queue'} onClick={() => { setView('queue') }}>Eligible queue</button>
+          <button type="button" aria-pressed={view === 'shortlist'} onClick={() => setView('shortlist')}>Shortlisted ({shortlisted.length})</button>
         </div>
-        {view === 'swipe' && <SwipeDeck key={company.id} cards={cards} loading={!current || !swipeStore.ready} error={swipeStore.error || (current?.failed ? 'Could not load candidate scores.' : '')}
+        {view === 'swipe' && <SwipeDeck side="employer" key={company.id} cards={cards} loading={!current || !swipeStore.ready} error={swipeStore.error || (current?.failed ? 'Could not load candidate scores.' : '')}
           onRetry={() => { swipeStore.retry(); setAttempt((value) => value + 1) }}
           onUndo={(candidate_id) => swipeStore.undo({ candidate_id, company_id: company.id, actor: 'employer' })}
           onDecide={(candidate_id, decision) => swipeStore.decide({ candidate_id, company_id: company.id, actor: 'employer', decision })}
-          saved={own.filter((row) => row.decision === 'like').map((row) => ({ id: row.candidate_id, name: current?.matches.find((match) => match.candidate_id === row.candidate_id)?.anonymous_code ?? 'Talent', mutual: likedBy.has(row.candidate_id) }))}
+          saved={shortlisted.map(({ candidate_id }) => ({
+            id: candidate_id,
+            name: candidates.find(({ id }) => id === candidate_id)?.anonymous_code ?? 'Candidate',
+            mutual: interested.has(candidate_id),
+          }))}
           onReview={() => { setShowAll(true); setView('queue') }} />}
+        {view === 'shortlist' && <section className={panel} aria-labelledby="shortlist-heading">
+          <h2 id="shortlist-heading" className="text-xl font-bold">Shortlisted candidates</h2>
+          {swipeStore.error ? <p role="alert" className="mt-3 text-sm">{swipeStore.error} <button type="button" className={link} onClick={swipeStore.retry}>Retry</button></p> :
+            !swipeStore.ready ? <p role="status" className="mt-3 text-sm">Loading shortlist…</p> :
+            shortlisted.length === 0 ? <p className="mt-3 text-sm">Shortlist a candidate from Discover talent to see them here.</p> :
+            <div className="mt-4 space-y-4">
+              {shortlisted.map(({ candidate_id }) => <EmployerTasks key={company.id + '-' + candidate_id}
+                name={candidates.find(({ id }) => candidate_id === id)?.anonymous_code ?? 'Candidate'}
+                score={current?.matches.find((match) => match.candidate_id === candidate_id)?.total_score}
+                mutual={interested.has(candidate_id)} candidateId={candidate_id} companyId={company.id} store={swipeStore} />)}
+            </div>}
+        </section>}
       <section hidden={view !== 'queue'} className={`${panel} min-w-0`} aria-labelledby="queue-heading">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="queue-heading" className="text-xl font-bold tracking-tight">People to meet</h2>

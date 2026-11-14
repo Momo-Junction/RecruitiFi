@@ -179,11 +179,42 @@ export async function saveSwipe(swipe: SwipeDecision): Promise<SwipeDecision> {
   const response = await fetch(`${apiUrl}/api/swipes`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(swipe),
   })
-  if (!response.ok) throw new Error('Could not save your swipe. Please try again.')
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}))
+    throw new Error(typeof body.detail === 'string' ? body.detail : 'Could not save your decision. Please try again.')
+  }
   return response.json()
 }
 
 export async function undoSwipe(swipe: Pick<SwipeDecision, 'actor' | 'candidate_id' | 'company_id'>) {
   const response = await fetch(`${apiUrl}/api/swipes/${swipe.actor}/${swipe.candidate_id}/${swipe.company_id}`, { method: 'DELETE' })
-  if (!response.ok) throw new Error('Could not undo your swipe. Please try again.')
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}))
+    throw new Error(typeof body.detail === 'string' ? body.detail : 'Could not undo your decision. Please try again.')
+  }
+}
+
+export interface HiringTask {
+  id: number
+  company_id: number
+  candidate_id: number
+  title: string
+  description: string
+  submission_url: string | null
+  verified: boolean
+}
+
+export function loadHiringTasks(signal: AbortSignal) {
+  return get<HiringTask[]>('hiring-tasks', signal)
+}
+
+export async function writeHiringTask(path: string, method: 'POST' | 'PUT', body?: object): Promise<HiringTask> {
+  const response = await fetch(apiUrl + '/api/hiring-tasks' + path, {
+    method, headers: { 'Content-Type': 'application/json' }, body: body && JSON.stringify(body),
+  })
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}))
+    throw new Error(typeof result.detail === 'string' ? result.detail : 'Could not save the task. Check your entries and try again.')
+  }
+  return response.json()
 }

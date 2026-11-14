@@ -445,14 +445,6 @@
   width:17px;
   height:17px;
 }
-.swipe-hint {
-  text-align:center;
-  color:#997e87;
-  font-size:10px;
-}
-.swipe-hint span {
-  margin:0 10px;
-}
 .swipe-notice {
   min-height:25px;
   text-align:center;
@@ -606,5 +598,51 @@
   }
   .discovery-loader {
     animation:none;
+  }
+}
+
+.swipe-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 72px));
+  align-items: start;
+  justify-items: center;
+  gap: clamp(8px, 4vw, 20px);
+  padding-right: 0;
+}
+.swipe-actions button {
+  width: clamp(56px, 13vw, 66px);
+  height: clamp(56px, 13vw, 66px);
+}
+.swipe-actions .swipe-undo {
+  width: 48px;
+  height: 48px;
+  margin: 4px 0 0;
+}
+.swipe-actions > div > span {
+  color: #6d505a;
+  font-size: 10px;
+  letter-spacing: .04em;
+}
+.swipe-card.leaving-like,
+.swipe-card.leaving-pass {
+  transition-delay: .07s;
+}
+.swipe-stamp {
+  font-size: clamp(19px, 6vw, 32px);
+  animation: stamp-pop .18s ease-out;
+}
+@keyframes stamp-pop {
+  from { opacity: .35; scale: .78; }
+  to { opacity: 1; scale: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .swipe-stamp {
+    animation: none;
+  }
+  .swipe-card.leaving-like,
+  .swipe-card.leaving-pass {
+    transition-delay: 0s;
+    transform: none;
+    opacity: 1;
   }
 }
