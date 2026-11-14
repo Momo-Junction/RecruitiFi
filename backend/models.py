@@ -14,6 +14,10 @@ class SwipeDecision(BaseModel):
     decision: Literal['like', 'pass']
 
 
+class SwipeResult(SwipeDecision):
+    mutual_match: bool
+
+
 class Skill(BaseModel):
     id: int
     esco_uri: str
