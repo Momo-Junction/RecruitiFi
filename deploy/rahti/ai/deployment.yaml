@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recruitifi-ai
+  labels:
+    app: recruitifi-ai
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: recruitifi-ai
+  template:
+    metadata:
+      labels:
+        app: recruitifi-ai
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 40
+      nodeSelector:
+        kubernetes.io/os: linux
+        kubernetes.io/arch: amd64
+      securityContext:
+        runAsNonRoot: true
+        # Rahti assigns UID, groups, SELinux and seccomp through its SCC.
+      containers:
+        - name: inference
+          image: image-registry.openshift-image-registry.svc:5000/REPLACE_NAMESPACE/recruitifi-ai:REPLACE_TAG
+          imagePullPolicy: Always
+          command: [python, -m, service]
+          args: [--host, 0.0.0.0]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: TALENTMATCH_EMBED_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: recruitifi-ai-auth
+                  key: TALENTMATCH_EMBED_TOKEN
+          resources:
+            requests:
+              cpu: 250m
+              memory: 384Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          startupProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 36
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 15
+            timeoutSeconds: 2
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
