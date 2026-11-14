@@ -500,3 +500,10 @@ python3 -B deploy/rahti/test_container.py recruitifi:jobs
 See [the safe Rahti update procedure](deploy/rahti/README.md#installing-industry-filters-and-job-rankings)
 for backup, additive migration, explicit job initialization and count verification.
 No deployment, commit or push is part of these local checks.
+
+## Prepared public demo release (not deployed)
+
+See [the public demo preparation runbook](deploy/rahti/PUBLIC_DEMO_PREP.md) for
+explicit password-free account sessions, a backed-up one-time Talent skills/likes
+reset, and 50 additional fictional jobs. Defaults retain password verification;
+no startup resets or automatic job insertion are introduced.
