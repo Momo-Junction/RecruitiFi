@@ -4,11 +4,12 @@ from pathlib import Path
 from typing import Literal
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
+from .demo_accounts import guard_demo_identity, request_account, router as demo_accounts_router
 from .demo_auth import DemoAuthMiddleware, hosted_password
 from .database import SCHEMA_PATH, connect
 from .matching_engine import LANGUAGE_LEVELS, SCORING_VERSION, calculate_match
@@ -53,7 +54,8 @@ async def lifespan(app: FastAPI):
 
 # Validate hosted configuration before Uvicorn can accept requests, including direct launches.
 hosted_password()
-app = FastAPI(title="City of Espoo TalentMatch", lifespan=lifespan)
+app = FastAPI(title="City of Espoo TalentMatch", lifespan=lifespan, dependencies=[Depends(guard_demo_identity)])
+app.include_router(demo_accounts_router)
 app.include_router(profile_router)
 app.include_router(notifications_router)
 app.add_middleware(
@@ -66,7 +68,7 @@ app.add_middleware(
         if origin.strip()
     ],
     allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "X-Recruitifi-Demo-Account"],
 )
 
 # Outermost middleware protects static files, docs, downloads and every API method.
@@ -98,16 +100,29 @@ def list_companies():
     )
 
 
-@app.get("/api/candidates", response_model=list[Candidate])
-def list_candidates():
+def candidate_rows(account=None):
     with connect() as connection:
         ids = [row["id"] for row in connection.execute("SELECT id FROM candidates ORDER BY id")]
+        if account is not None:
+            ids = [identity for identity in ids if account.get("candidate_id") == identity]
         return [candidate_profile(connection, candidate_id)["candidate"] for candidate_id in ids]
 
 
+@app.get("/api/candidates", response_model=list[Candidate])
+def list_candidates(request: Request):
+    return candidate_rows(request_account(request))
+
+
 @app.get('/api/swipes', response_model=list[SwipeDecision])
-def list_swipes():
-    return read_rows('SELECT * FROM swipe_decisions ORDER BY candidate_id, company_id, actor')
+def list_swipes(request: Request):
+    account = request_account(request)
+    clause, params = '', ()
+    if account is not None:
+        if account['role'] == 'organizer':
+            return []
+        column = 'candidate_id' if account['role'] == 'talent' else 'company_id'
+        clause, params = f' WHERE {column}=?', (account[column],)
+    return read_rows('SELECT * FROM swipe_decisions' + clause + ' ORDER BY candidate_id, company_id, actor', params=params)
 
 
 @app.put('/api/swipes', response_model=SwipeResult)
@@ -223,7 +238,7 @@ def rank_company_matches(company_id: PositiveId):
     skill_names = read_skill_names()
     matches = []
     entries = []
-    for row in list_candidates():
+    for row in candidate_rows():
         candidate = Candidate.model_validate(row)
         result = score_for_company(candidate, company, skill_names)
         entries.append(audit_score(candidate, company, result, "employer_queue"))
