@@ -24,9 +24,11 @@ from .models import (
     RankedMatch,
     Skill,
     SwipeDecision,
+    SwipeResult,
 )
 from .profile_materials import candidate_profile, router as profile_router
 from .hosting import initialize_demo
+from .notifications import initialize_notifications, reconcile_pair, router as notifications_router
 
 COMPANY_JSON_FIELDS = ("must_have_skills", "nice_to_have_skills")
 CANDIDATE_JSON_FIELDS = ("languages", "skills")
@@ -44,6 +46,8 @@ async def lifespan(app: FastAPI):
     # Render initializes a new synthetic event; Rahti keeps explicit operator seeding.
     if os.environ.get("TALENTMATCH_SERVE_FRONTEND") != "1":
         initialize_demo()
+    with connect() as connection:
+        initialize_notifications(connection)
     yield
 
 
@@ -51,6 +55,7 @@ async def lifespan(app: FastAPI):
 hosted_password()
 app = FastAPI(title="City of Espoo TalentMatch", lifespan=lifespan)
 app.include_router(profile_router)
+app.include_router(notifications_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -105,9 +110,10 @@ def list_swipes():
     return read_rows('SELECT * FROM swipe_decisions ORDER BY candidate_id, company_id, actor')
 
 
-@app.put('/api/swipes', response_model=SwipeDecision)
+@app.put('/api/swipes', response_model=SwipeResult)
 def save_swipe(swipe: SwipeDecision):
     with connect() as connection:
+        connection.execute("BEGIN IMMEDIATE")
         if not connection.execute('SELECT 1 FROM candidates WHERE id = ?', (swipe.candidate_id,)).fetchone():
             raise HTTPException(status_code=404, detail='Candidate not found.')
         if not connection.execute('SELECT 1 FROM companies WHERE id = ?', (swipe.company_id,)).fetchone():
@@ -117,7 +123,8 @@ def save_swipe(swipe: SwipeDecision):
             'ON CONFLICT(candidate_id, company_id, actor) DO UPDATE SET decision = excluded.decision',
             (swipe.candidate_id, swipe.company_id, swipe.actor, swipe.decision),
         )
-    return swipe
+        mutual = reconcile_pair(connection, swipe.candidate_id, swipe.company_id)
+    return {**swipe.model_dump(), "mutual_match": mutual}
 
 
 def get_company(company_id: int) -> Company:
@@ -322,11 +329,13 @@ def list_audit_calculations(
 @app.delete('/api/swipes/{actor}/{candidate_id}/{company_id}')
 def undo_swipe(actor: Literal['talent', 'employer'], candidate_id: PositiveId, company_id: PositiveId):
     with connect() as connection:
+        connection.execute("BEGIN IMMEDIATE")
         connection.execute(
             'DELETE FROM swipe_decisions WHERE actor = ? AND candidate_id = ? AND company_id = ?',
             (actor, candidate_id, company_id),
         )
-    return {'deleted': True}
+        mutual = reconcile_pair(connection, candidate_id, company_id)
+    return {'deleted': True, 'mutual_match': mutual}
 
 
 @app.get("/healthz", include_in_schema=False)
