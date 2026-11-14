@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "host_architecture": "arm64",
+  "bind": "127.0.0.1:18081",
+  "healthz": 200,
+  "readyz": 200,
+  "embed": 200,
+  "dimensions": 384,
+  "command": [
+    "/Users/samirbk/Junction/RecruitiFi/RecruitiFi/experiments/local_model/.venv/bin/python",
+    "-c",
+    "import uvicorn; uvicorn.run('service.app:app',host='127.0.0.1',port=18081,workers=1,access_log=False,limit_concurrency=8,backlog=16,timeout_keep_alive=5,timeout_graceful_shutdown=30)"
+  ],
+  "note": "Native Mac HTTP smoke check, not native Linux/amd64. Default port 8080 was already occupied; its existing listener was untouched.",
+  "server_exit_code": -15,
+  "no_submitted_text_in_logs": true
+}
