@@ -13,6 +13,11 @@ def hosted_password():
         raise RuntimeError("TALENTMATCH_HOSTED_DEMO must be 0 or 1.")
     if mode == "0":
         return None
+    enabled = os.environ.get("TALENTMATCH_DEMO_AUTH_ENABLED", "true").strip().lower()
+    if enabled not in ("true", "false"):
+        raise RuntimeError("TALENTMATCH_DEMO_AUTH_ENABLED must be true or false.")
+    if enabled == "false":
+        return None
     password = os.environ.get("TALENTMATCH_DEMO_PASSWORD", "")
     if not password.strip():
         raise RuntimeError("TALENTMATCH_DEMO_PASSWORD is required for hosted demo mode.")
