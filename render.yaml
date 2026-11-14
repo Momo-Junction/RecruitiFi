@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: recruitifi
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r backend/requirements.txt && npm ci --prefix frontend && npm run build --prefix frontend
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port "$PORT"
+    healthCheckPath: /healthz
+    disk:
+      name: recruitifi-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.0
+      - key: TALENTMATCH_DB
+        value: /var/data/talentmatch.sqlite3
+      - key: TALENTMATCH_HOSTED_DEMO
+        value: "1"
+      - key: TALENTMATCH_DEMO_PASSWORD
+        sync: false

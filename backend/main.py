@@ -25,6 +25,7 @@ from .models import (
     SwipeDecision,
 )
 from .profile_materials import candidate_profile, router as profile_router
+from .hosting import initialize_demo
 
 COMPANY_JSON_FIELDS = ("must_have_skills", "nice_to_have_skills")
 CANDIDATE_JSON_FIELDS = ("languages", "skills")
@@ -39,6 +40,9 @@ async def lifespan(app: FastAPI):
             "UPDATE skills SET name = ? WHERE name = ?",
             ("Quantum circuit programming with Qiskit", "Quantum Computing"),
         )
+    # Render initializes a new synthetic event; Rahti keeps explicit operator seeding.
+    if os.environ.get("TALENTMATCH_SERVE_FRONTEND") != "1":
+        initialize_demo()
     yield
 
 
@@ -331,5 +335,5 @@ def healthz():
 
 # Container builds supply these assets; local Vite development is unchanged.
 _frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
-if os.environ.get("TALENTMATCH_SERVE_FRONTEND") == "1" and (_frontend_dist / "index.html").is_file():
+if (os.environ.get("TALENTMATCH_SERVE_FRONTEND") == "1" or os.environ.get("TALENTMATCH_HOSTED_DEMO") == "1") and (_frontend_dist / "index.html").is_file():
     app.mount("/", StaticFiles(directory=_frontend_dist, html=True), name="frontend")
