@@ -1,0 +1,136 @@
+{
+  "runtime": "onnx-int8",
+  "python": "3.12.14 (main, Aug 12 2026, 13:57:54) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "architecture": "arm64",
+  "provider": [
+    "CPUExecutionProvider"
+  ],
+  "threads": 1,
+  "batch_sizes": [
+    1,
+    3
+  ],
+  "model_artifact": "onnx/model_qint8_arm64.onnx",
+  "model_revision": "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+  "max_sequence_length": 256,
+  "embedding_dimensions": 384,
+  "offline": {
+    "HF_HUB_OFFLINE": "1",
+    "TRANSFORMERS_OFFLINE": "1",
+    "os_probe": {
+      "blocked": true,
+      "errno": 1,
+      "mechanism": "macOS sandbox-exec deny network*"
+    },
+    "python_guard_verified": true,
+    "network_attempts_during_inference": 0
+  },
+  "runtime_import_seconds": 0.07454441697336733,
+  "model_load_seconds": 0.06870445801177993,
+  "startup_to_ready_seconds": 0.1432504170225002,
+  "first_sample_batch_ms": 12.07729201996699,
+  "baseline_rss_mib_after_numpy": 32.046875,
+  "rss_after_model_load_mib": 110.78125,
+  "peak_process_rss_mib": 155.671875,
+  "cases": [
+    {
+      "profile": "short",
+      "batch_size": 1,
+      "tokens_per_sequence_padded": 13,
+      "repeats": 30,
+      "median_ms": 1.8205204978585243,
+      "p95_ms": 1.9394604576518757,
+      "min_ms": 1.800333964638412,
+      "cpu_seconds": 0.05527800000000002,
+      "wall_seconds": 0.05529391602613032,
+      "cpu_percent_one_core": 99.97121559246631,
+      "current_rss_mib": 114.421875,
+      "peak_rss_mib": 114.421875
+    },
+    {
+      "profile": "short",
+      "batch_size": 3,
+      "tokens_per_sequence_padded": 13,
+      "repeats": 30,
+      "median_ms": 4.930458002490923,
+      "p95_ms": 5.297290257294662,
+      "min_ms": 4.818250017706305,
+      "cpu_seconds": 0.14934399999999998,
+      "wall_seconds": 0.14963574998546392,
+      "cpu_percent_one_core": 99.80502654914197,
+      "current_rss_mib": 114.421875,
+      "peak_rss_mib": 114.421875
+    },
+    {
+      "profile": "max_256_tokens",
+      "batch_size": 1,
+      "tokens_per_sequence_padded": 256,
+      "repeats": 15,
+      "median_ms": 35.664458002429456,
+      "p95_ms": 37.892941891914234,
+      "min_ms": 35.09933402528986,
+      "cpu_seconds": 0.5376610000000001,
+      "wall_seconds": 0.538943667022977,
+      "cpu_percent_one_core": 99.76200350770199,
+      "current_rss_mib": 118.359375,
+      "peak_rss_mib": 118.359375
+    },
+    {
+      "profile": "max_256_tokens",
+      "batch_size": 3,
+      "tokens_per_sequence_padded": 256,
+      "repeats": 15,
+      "median_ms": 106.91295802826062,
+      "p95_ms": 108.39259999338537,
+      "min_ms": 105.14545801561326,
+      "cpu_seconds": 1.6031609999999998,
+      "wall_seconds": 1.6048102920176461,
+      "cpu_percent_one_core": 99.89722822530177,
+      "current_rss_mib": 155.03125,
+      "peak_rss_mib": 155.03125
+    }
+  ],
+  "synthetic_descriptions": [
+    "Developed REST APIs using Python and FastAPI.",
+    "Built React interfaces using TypeScript.",
+    "Created Docker container configurations."
+  ],
+  "synthetic_requirements": [
+    "Python and FastAPI REST API development.",
+    "React and TypeScript frontend development.",
+    "Docker container configuration and deployment.",
+    "Food hygiene and restaurant kitchen cleaning."
+  ],
+  "similarity_matrix": [
+    [
+      0.9471811056137085,
+      0.20366421341896057,
+      0.07615548372268677,
+      0.11617231369018555
+    ],
+    [
+      0.1557941734790802,
+      0.789280891418457,
+      0.03473304212093353,
+      0.06811177730560303
+    ],
+    [
+      0.08021104335784912,
+      0.1025693342089653,
+      0.7694562077522278,
+      -0.0009251460433006287
+    ]
+  ],
+  "dependency_versions": {
+    "torch": "2.15.0",
+    "transformers": "5.23.0",
+    "onnxruntime": "1.32.0",
+    "tokenizers": "0.23.3",
+    "numpy": "2.5.4",
+    "psutil": "7.2.2",
+    "safetensors": "0.8.0",
+    "huggingface-hub": "2.4.0"
+  },
+  "method": "Fresh process per runtime; local files only; tokenizer + forward + attention-mask mean pooling + L2 normalization included in timings. Imports/model loading reported separately. No GPU/MPS/CoreML."
+}
