@@ -1,4 +1,6 @@
+import { useAiMatches, aiLabel, AiExplanation } from './useAiMatches'
 import { JobRequirements } from './Jobs'
+import { EmployerEvidence } from './EmployerEvidence'
 import { interestedCandidates } from './useSwipes'
 import { NotificationBell } from './NotificationBell'
 import { SwipeDeck, type DiscoveryCard } from './SwipeDeck'
@@ -136,28 +138,29 @@ export function CandidateSignal({ match, companyId, interested = false, jobConte
   const [reviewed, setReviewed] = useState(false)
   const [error, setError] = useState('')
   const needsReview = jobContext || !match.dealbreakers_passed || !match.meets_threshold
-  const signals = [...match.must_have_skills, ...match.nice_to_have_skills].filter(({ evidence_tier }) => evidence_tier !== 'missing')
+  const signals = match.ai?.requirements.filter(r => r.status === 'supported') ?? []
   return (
     <li className="rounded-xl border border-slate-200 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-bold">{match.anonymous_code} {interested && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-900">Interested</span>}</h3>
-        <strong className="rounded-lg bg-mist px-2.5 py-1 text-lg tabular-nums text-espoo">{format.format(match.total_score)}%</strong>
+        <strong className="rounded-lg bg-mist px-2.5 py-1 text-lg tabular-nums text-espoo">{aiLabel(match.ai)}</strong>
       </div>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-emerald-800">
         <span>{match.dealbreakers_passed ? '✓ Role requirements met' : 'Requirements to discuss'}</span>
       </div>
       <ul aria-label="Overlapping skill evidence" className="mt-3 flex flex-wrap gap-2">
-        {signals.map(({ skill_id, skill_name, evidence_tier }) => (
-          <li key={skill_id} className={`rounded-md px-2 py-1 text-xs ${evidence_tier === 'certificate' ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-100 text-slate-700'}`}>
-            {skill_name} · {evidence_tier === 'certificate' ? 'Certificate submitted' : evidence_tier === 'portfolio' ? 'Work sample' : 'Listed skill'}
+        {signals.map(({ skill_id, skill_name }) => (
+          <li key={skill_id} className="rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700">
+            {skill_name} · Relevant evidence · Unreviewed
           </li>
         ))}
       </ul>
+      <AiExplanation match={match.ai} />
       {needsReview && (
         <div className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">
           {jobContext && <p>Job fit is shown. Meetings remain subject to the company’s existing human review.</p>}
           {match.dealbreaker_reasons.map((reason) => <p key={reason}>{reason}</p>)}
-          {!match.meets_threshold && <p>Below the role’s suggested match level.</p>}
+          {match.ai?.score != null && match.ai.score < match.min_match_threshold && <p>Below the role’s suggested AI coverage level.</p>}
           <label className="mt-2 flex items-start gap-2"><input type="checkbox" checked={reviewed} onChange={(event) => setReviewed(event.target.checked)} />I have reviewed this profile and would like a conversation.</label>
         </div>
       )}
@@ -221,18 +224,20 @@ export function EmployerWorkspace({ companyId, companies, skills, candidates, on
     return () => controller.abort()
   }, [company, job, jobs, attempt, candidates])
 
+  const ai = useAiMatches(current?.matches.map(m => m.candidate_id) ?? [])
+  const aiMatches = current?.matches.map(m => ({...m, ai: ai.match(m.candidate_id, job?.id)})).sort((a,b)=>(b.ai.score ?? -1)-(a.ai.score ?? -1))
   if (!company) return <p>Your demo company profile is unavailable. Log out and contact the demo operator.</p>
-  const visibleMatches = current?.matches.filter((match) => showAll || (match.dealbreakers_passed && match.meets_threshold)) ?? []
+  const visibleMatches = aiMatches?.filter((match) => showAll || match.ai.score === null || (match.dealbreakers_passed && match.ai.score >= (job?.min_match_threshold ?? company.min_match_threshold))) ?? []
   const decisions = swipeStore.swipes.filter((row) => row.company_id === company.id)
   const own = decisions.filter((row) => row.actor === 'employer')
   const likedBy = interestedCandidates(swipeStore.swipes, company.id)
-  const cards: DiscoveryCard[] = (current?.matches ?? []).filter((match) => !own.some((row) => row.candidate_id === match.candidate_id)).map((match) => ({
+  const cards: DiscoveryCard[] = (aiMatches ?? []).filter((match) => !own.some((row) => row.candidate_id === match.candidate_id)).map((match) => ({
     id: match.candidate_id, name: match.anonymous_code, subtitle: job ? `${job.title} · ${company.name}` : 'Talent in Espoo · identity stays private',
-    monogram: match.anonymous_code.slice(-2), score: match.total_score,
-    eligible: match.dealbreakers_passed && match.meets_threshold, likedYou: likedBy.has(match.candidate_id), interestLabel: 'Interested',
+    monogram: match.anonymous_code.slice(-2), score: match.ai.score, scoreLabel: aiLabel(match.ai),
+    eligible: match.dealbreakers_passed && match.ai.score !== null && match.ai.score >= (job?.min_match_threshold ?? company.min_match_threshold), likedYou: likedBy.has(match.candidate_id), interestLabel: 'Interested',
     facts: [match.dealbreakers_passed ? 'Language & visa compatible' : 'Check role requirements', `${job?.min_match_threshold ?? company.min_match_threshold}% meeting threshold`],
-    skills: [...match.must_have_skills, ...match.nice_to_have_skills].map((skill) => ({ name: skill.skill_name, matched: skill.evidence_tier !== 'missing' })),
-    warnings: [...match.dealbreaker_reasons, ...(!match.meets_threshold ? ['Below your meeting threshold'] : [])],
+    skills: [...match.must_have_skills, ...match.nice_to_have_skills].map((skill) => ({ name: skill.skill_name, matched: match.ai.requirements.some(r => r.skill_id === skill.skill_id && r.status === 'supported') })),
+    warnings: match.dealbreaker_reasons,
   }))
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(21rem,0.9fr)_minmax(0,1.3fr)]">
@@ -288,7 +293,7 @@ export function EmployerWorkspace({ companyId, companies, skills, candidates, on
             <p role="status" className="text-sm font-semibold text-espoo">{visibleMatches.length} {showAll ? 'profiles to explore' : 'suggested conversations'}</p>
             {visibleMatches.length === 0 && <p className="mt-3 rounded-lg bg-mist p-4 text-sm">No suggestions yet. Explore all talent to find potential beyond the role requirements.</p>}
             <ul className="mt-3 space-y-3">
-              {visibleMatches.map((match) => <CandidateSignal key={`${job?.id ?? 'company'}:${match.anonymous_code}`} match={match} companyId={company.id} jobContext={!!job} interested={likedBy.has(match.candidate_id)} />)}
+              {visibleMatches.map((match) => <div key={`${job?.id ?? 'company'}:${match.anonymous_code}`}><CandidateSignal match={match} companyId={company.id} jobContext={!!job} interested={likedBy.has(match.candidate_id)} /><EmployerEvidence companyId={company.id} candidateId={match.candidate_id} /></div>)}
             </ul>
           </div>
         )}
