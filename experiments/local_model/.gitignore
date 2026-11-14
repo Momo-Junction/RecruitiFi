@@ -1,0 +1,13 @@
+.venv/
+models/
+hf_cache/
+.cache/
+__pycache__/
+*.pyc
+*.safetensors
+*.onnx
+*.bin
+*.pt
+*.pth
+*.h5
+*.log
