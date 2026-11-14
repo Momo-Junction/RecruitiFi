@@ -1,3 +1,4 @@
+import { NotificationBell } from './NotificationBell'
 import { SwipeDeck, type DiscoveryCard } from './SwipeDeck'
 import type { SwipeStore } from './useSwipes'
 import { useEffect, useState } from 'react'
@@ -174,7 +175,7 @@ export function TalentWorkspace({ candidates, companies, skills, onSaved, swipeS
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(19rem,0.8fr)_minmax(0,1.4fr)]">
       <section aria-labelledby="profile-heading" className={`${panel} min-w-0 p-5 sm:p-6`}>
-        <h2 id="profile-heading" className="text-xl font-bold tracking-tight">Talent profile</h2>
+        <div className="flex items-center justify-between gap-3"><h2 id="profile-heading" className="text-xl font-bold tracking-tight">Talent profile</h2><NotificationBell key={candidate.id} recipient="talent" identityId={candidate.id} /></div>
         <p className="mt-1 text-sm leading-relaxed text-slate-600">Build a profile around your experience, projects and qualifications.</p>
         <label className="mt-5 grid gap-1.5 text-sm font-semibold">
           Candidate persona
