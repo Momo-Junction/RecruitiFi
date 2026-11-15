@@ -29,9 +29,10 @@ test('Interested is derived only from that company’s incoming talent likes', (
 const card = { id: 402, name: 'Talent #402', subtitle: 'Synthetic', monogram: '02', score: 56, eligible: false, likedYou: true, interestLabel: 'Interested', facts: [], skills: [], warnings: [] }
 const deck = { cards: [card], loading: false, onRetry() {}, async onDecide() { return false }, saved: [], async onUndo() {} }
 test('existing swipe card shows exact Interested badge regardless of compatibility score', () => {
-  assert.match(renderToString(React.createElement(SwipeDeck, deck)), />Interested<\/span>/)
+  const badge = /class="rounded-full bg-emerald-100[^"]*">Interested<\/span>/
+  assert.match(renderToString(React.createElement(SwipeDeck, deck)), badge)
   const html = renderToString(React.createElement(SwipeDeck, { ...deck, cards: [{ ...card, score: 100, eligible: true, likedYou: false }] }))
-  assert.doesNotMatch(html, />Interested<\/span>/)
+  assert.doesNotMatch(html, badge)
 })
 
 test('existing employer queue card shows and removes the same Interested badge', () => {
