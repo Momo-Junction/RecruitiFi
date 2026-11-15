@@ -30,7 +30,7 @@ export function NotificationBell({ recipient, identityId }: { recipient: 'talent
   }, [recipient, identityId, attempt])
 
   return <div className="relative shrink-0">
-    <button type="button" aria-label={`Notifications${feed ? `, ${feed.unread_count} unread` : ''}`} aria-expanded={open} onClick={() => setOpen((value) => !value)} className="flex cursor-pointer items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-espoo hover:bg-mist">
+    <button type="button" aria-label={`Notifications${feed ? `, ${feed.unread_count} unread` : ''}`} aria-expanded={open} onClick={() => setOpen((value) => !value)} className="notification-toggle flex cursor-pointer items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 text-sm font-semibold text-espoo hover:bg-mist">
       <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
       <span aria-live="polite">{error ? '!' : feed?.unread_count ?? '…'}</span>
     </button>
