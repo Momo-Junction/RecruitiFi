@@ -76,11 +76,12 @@ test('unavailable storage supports in-page selection/logout; corrupt storage nev
   }
   assert.throws(() => navigation.select({ ...accounts[0], available: false }), /available demo account/)
 })
-test('welcome preserves existing role choices and explicitly describes demo-only authorization', () => {
+test('startup shows an accessible preloader until account configuration and catalog are ready', () => {
   const html = renderToString(React.createElement(App))
-  for (const role of ['Talent', 'Employer', 'Espoo Organizer']) assert.ok(html.includes('Continue as ' + role) || html.includes('Continue as <!-- -->' + role))
-  assert.match(html, /no secure account authorization/)
+  assert.match(html, /Loading TalentMatch/)
+  assert.match(html, /aria-busy="true"/)
   assert.ok(!html.includes('Candidate persona'))
+  assert.ok(!html.includes('Your skills'))
 })
 test('stored session waits for server account validation before any personal dashboard renders', () => {
   const original = globalThis.window
@@ -89,7 +90,7 @@ test('stored session waits for server account validation before any personal das
       globalThis.window = browser('/' + account.role, account)
       const html = renderToString(React.createElement(App))
       assert.match(html, /Checking your demo account/)
-      assert.match(html, /Logout \/ Switch Account/)
+      assert.match(html, /aria-busy="true"/)
       assert.ok(!html.includes('aria-label="Notifications'))
       assert.ok(!html.includes('Your skills'))
     }
