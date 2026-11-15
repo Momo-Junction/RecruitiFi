@@ -1,4 +1,4 @@
-import { analysisRevision, resourceAnalysisMode, sourceAnalysisNote } from './analysisResources'
+import { analysisRevision, resourceAnalysisMode, sourceAnalysisNote, materialDisplayName } from './analysisResources'
 import { useAiMatches, aiLabel, AiExplanation, displayAiScore } from './useAiMatches'
 import { filterJobs, IndustryFilters, JobEmptyState, JobRequirements, jobCompanyId, useIndustryFilters } from './Jobs'
 import { NotificationBell } from './NotificationBell'
@@ -26,7 +26,7 @@ const evidenceLabels: Record<EvidenceTier, string> = {
   certificate: 'Certificate submitted',
 }
 const panel = 'rounded-2xl border border-slate-200 bg-white shadow-sm'
-const select = 'min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm'
+const select = 'workspace-select'
 const primary = 'rounded-lg bg-espoo px-4 py-2.5 text-sm font-semibold text-white enabled:cursor-pointer enabled:hover:bg-blue-900 disabled:opacity-50'
 const format = new Intl.NumberFormat('en', { maximumFractionDigits: 1 })
 
@@ -67,6 +67,7 @@ export function TalentWorkspace({ candidateId, candidates, companies, skills, on
   const [shareAnalysis,setShareAnalysis]=useState(false)
   useEffect(() => {setAnalysisMaterials([]);setAnalysisConsent(false);setShareAnalysis(false)},[candidateId])
   const [view, setView] = useState<'swipe' | 'list' | 'updates'>('swipe')
+  const [filtersOpen,setFiltersOpen]=useState(false)
   const [savedProfile, setSavedProfile] = useState<SavedProfile>()
   const ai = useAiMatches([candidateId], analysisRevision(savedProfile))
   useEffect(() => {
@@ -161,30 +162,33 @@ export function TalentWorkspace({ candidateId, candidates, companies, skills, on
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[minmax(19rem,0.8fr)_minmax(0,1.4fr)]">
-      <section aria-labelledby="profile-heading" className={`${panel} min-w-0 p-5 sm:p-6`}>
+      <section aria-labelledby="profile-heading" className={`${panel} talent-profile min-w-0 p-4 sm:p-6`}>
         <div className="flex items-center justify-between gap-3"><h2 id="profile-heading" className="text-xl font-bold tracking-tight">Talent profile</h2><NotificationBell key={candidate.id} recipient="talent" identityId={candidate.id} /></div>
-        <p className="mt-1 text-sm leading-relaxed text-slate-600">Build a profile around your experience, projects and qualifications.</p>
-        <p className="mt-5 text-sm font-semibold">{candidate.full_name} · {candidate.anonymous_code}</p>
+        <p className="mt-4 text-sm font-semibold">{candidate.full_name}<span className="mt-1 block text-xs font-normal text-slate-500">{candidate.anonymous_code}</span></p>
         <p className="mt-3 text-sm text-slate-600">{Object.entries(profile.languages).map(([name, level]) => `${name} ${level}`).join(' · ')}</p>
         {profile.needs_visa_sponsorship && <p className="mt-1 text-sm text-slate-600">Needs visa sponsorship</p>}
-        <fieldset className="my-4 rounded-xl border border-slate-200 p-3 text-sm"><legend className="font-semibold">AI profile analysis</legend>
-          <p>Select up to three saved resources from any section. PDFs provide text; other links and images use saved descriptions. GitHub links use public retrieval by default. A LinkedIn link adds a labelled +2 profile-completion bonus; its page is not fetched.</p>
-          {savedProfile.materials.map(m => <label key={m.id} className="mt-2 flex gap-2"><input type="checkbox" checked={analysisMaterials.includes(m.id)} onChange={e => setAnalysisMaterials(ids => e.target.checked ? [...ids,m.id].slice(0,3) : ids.filter(id => id!==m.id))} /><span>{m.title} · {m.category}<small className="block text-slate-600">{resourceAnalysisMode(m,ai.publicProfilesEnabled)}</small></span></label>)}
-          {!savedProfile.materials.length && <p className="mt-2">Add a resource and description below before analyzing.</p>}
-          <label className="mt-3 flex gap-2"><input type="checkbox" checked={analysisConsent} onChange={e => setAnalysisConsent(e.target.checked)} />I own or have permission to analyze the selected evidence with the private model.</label>
-          <label className="mt-2 flex gap-2"><input type="checkbox" checked={shareAnalysis} onChange={e => setShareAnalysis(e.target.checked)} />Share resulting job scores and short evidence excerpts with Employer 001.</label>
-          <button type="button" className={primary} disabled={ai.busy || (candidateId!==900001 && (!analysisConsent || analysisMaterials.length===0))} onClick={() => void ai.analyze(candidateId,analysisMaterials.length && analysisConsent ? analysisMaterials : undefined,shareAnalysis)}>{ai.busy ? 'Analyzing…' : 'Analyze My Profile'}</button>
-        </fieldset>{ai.message && <p role="status" className="mt-2 text-sm">{ai.message}</p>}{ai.sources.map(source => <p key={source.material_id} className="mt-1 text-xs text-slate-600">Source #{source.material_id} · {source.category}: {sourceAnalysisNote(source)}</p>)}<ProfileMaterials key={candidate.id} profile={savedProfile} skills={skills} onSaved={acceptSaved} />
+        <fieldset className="my-4 rounded-xl border border-slate-200 p-3 text-sm"><legend className="px-1 font-semibold">Our Own Private Model</legend>
+          <p className="text-xs text-slate-600">Choose up to 3 resources to analyze.</p>
+          <details className="mt-2 text-xs text-slate-600"><summary className="cursor-pointer text-espoo">How it works</summary><p className="mt-2">PDFs provide text; other links and images use saved descriptions. GitHub uses public retrieval. LinkedIn adds a +2 profile-completion bonus; its page is not fetched. Results show evidence relevance, not verified proficiency.</p></details>
+          {savedProfile.materials.map(m => <label key={m.id} className="resource-option"><input type="checkbox" checked={analysisMaterials.includes(m.id)} onChange={e => setAnalysisMaterials(ids => e.target.checked ? [...ids,m.id].slice(0,3) : ids.filter(id => id!==m.id))} /><span className="min-w-0 break-words">{materialDisplayName(m)}<span className="sr-only">. {resourceAnalysisMode(m,ai.publicProfilesEnabled)}</span></span></label>)}
+          {!savedProfile.materials.length && <p className="mt-2">Add a document or link below to get started.</p>}
+          <label className="consent-row"><input type="checkbox" checked={analysisConsent} onChange={e => setAnalysisConsent(e.target.checked)} /><span>I have permission to analyze these resources with the private model.</span></label>
+          <label className="consent-row"><input type="checkbox" checked={shareAnalysis} onChange={e => setShareAnalysis(e.target.checked)} /><span>Share scores and short evidence excerpts with Employer 001.</span></label>
+          <button type="button" className={`${primary} mt-3 w-full`} disabled={ai.busy || (candidateId!==900001 && (!analysisConsent || analysisMaterials.length===0))} onClick={() => void ai.analyze(candidateId,analysisMaterials.length && analysisConsent ? analysisMaterials : undefined,shareAnalysis)}>{ai.busy ? 'Analyzing…' : 'Analyze My Profile'}</button>
+        </fieldset>
+        {ai.message && <p role="status" className="mt-2 text-sm">{ai.message}</p>}
+        {ai.sources.length>0 && <details className="mt-3 text-xs text-slate-600"><summary className="cursor-pointer text-espoo">Source details ({ai.sources.length})</summary>{ai.sources.map(source => <p key={source.material_id} className="mt-2">Source #{source.material_id}: {sourceAnalysisNote(source)}</p>)}</details>}
+        <details className="mt-5 border-t border-slate-200 pt-4"><summary className="cursor-pointer text-sm font-semibold">Documents & links <span className="font-normal text-slate-500">({savedProfile.materials.length})</span></summary><ProfileMaterials key={candidate.id} profile={savedProfile} skills={skills} onSaved={acceptSaved} /></details>
         {profileError && <p role="alert" className="mt-3 text-sm text-red-800">{profileError}</p>}
-        <h3 className="mt-6 text-sm font-bold">Your skills</h3><p className="mt-1 text-xs text-slate-600">Added skills are self-declared. Adding or removing a skill refreshes AI status; analyze your selected evidence again to update its supporting associations. Selecting a skill alone does not verify proficiency or increase AI evidence scores.</p>
-        <form className="mt-2 flex gap-2" onSubmit={(event) => {
+        <h3 className="mt-6 text-sm font-bold">Your skills</h3><p className="mt-1 text-xs text-slate-600">Self-declared skills. Analyze supporting evidence to check relevance.</p>
+        <form className="skill-picker" onSubmit={(event) => {
           event.preventDefault()
           const skillId = Number(skillToAdd)
           if (!availableSkills.some(({ id }) => id === skillId)) return
           void saveSkills([...profile.skills.map(({ skill_id }) => skill_id), skillId])
           setSkillToAdd('')
         }}>
-          <select aria-label="Skill to add" className={`${select} flex-1`} value={skillToAdd} onChange={(event) => setSkillToAdd(event.target.value)}>
+          <select aria-label="Skill to add" className={select} value={skillToAdd} onChange={(event) => setSkillToAdd(event.target.value)}>
             <option value="">Select a skill</option>
             {availableSkills.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
           </select>
@@ -206,8 +210,8 @@ export function TalentWorkspace({ candidateId, candidates, companies, skills, on
         </ul>
       </section>
       <div className="order-first min-w-0 lg:order-none">
-        {jobDirectory && <IndustryFilters categories={jobDirectory.industries} selected={filters.selected} onChange={filters.update} />}
-        <p className="mb-3 text-xs text-slate-500">Likes and passes apply to the company across all its job openings.</p>
+        {jobDirectory && <section className="industry-controls"><button type="button" aria-expanded={filtersOpen} aria-controls={`industry-options-${candidate.id}`} onClick={()=>setFiltersOpen(value=>!value)}>Filter by industry <span>{filters.selected.length ? `${filters.selected.length} selected`:'All industries'} <span aria-hidden="true">⌄</span></span></button><div id={`industry-options-${candidate.id}`} className={`industry-filter-body ${filtersOpen?'is-open':''}`}><IndustryFilters categories={jobDirectory.industries} selected={filters.selected} onChange={filters.update} /></div></section>}
+        <p className="mb-3 text-xs text-slate-500">Your choice applies to the company across all its job openings.</p>
         <div className="talent-view-toggle" aria-label="Job discovery mode">
           <button type="button" aria-pressed={view === 'swipe'} onClick={() => setView('swipe')}>✦ Swipe & connect</button>
           <button type="button" aria-pressed={view === 'list'} onClick={() => setView('list')}>All jobs</button>
