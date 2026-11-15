@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { materialDisplayName } from './analysisResources'
 import { EvidenceAnalysis, type EvidenceAnalysisView } from './EvidenceAnalysis'
 import { saveResourceDescription } from './useAiMatches'
 import { BrowserEvidence } from './BrowserEvidence'
@@ -47,7 +48,7 @@ export function ProfileMaterials({ profile, skills, onSaved, analysisViews = [] 
               <ul className="mt-2 space-y-2">
                 {materials.map((item) => (
                   <li key={item.id} className="rounded-lg bg-mist p-2 text-sm">
-                    <a href={item.url ?? documentUrl(candidateId, item.id)} target="_blank" rel="noopener noreferrer" className="break-words font-semibold text-espoo underline">{item.title}</a>
+                    <a href={item.url ?? documentUrl(candidateId, item.id)} target="_blank" rel="noopener noreferrer" className="break-words font-semibold text-espoo underline">{materialDisplayName(item)}</a>
                     {item.description && <p className="mt-1 whitespace-pre-wrap break-words text-xs text-slate-600">{item.description}</p>}
                     {item.url && <details className="mt-2 text-xs"><summary className="cursor-pointer text-espoo underline">Add / edit analysis description</summary>
                       <form className="mt-2 space-y-2" onSubmit={async event => {
