@@ -1,509 +1,441 @@
-# City of Espoo TalentMatch
+# RecruitiFi
 
-A demo event directory with a FastAPI and SQLite backend and a React, TypeScript, Vite, and Tailwind CSS frontend. The seed data includes 40 skills, 8 fictional Espoo employers, and 15 synthetic candidates. For a larger practice directory, run `python -m backend.seed --include-practice` from the repository root. This adds missing practice records while preserving existing profiles.
+**Skill-based talent discovery with private AI evidence analysis.**
 
-## Run locally
+RecruitiFi connects Talent and Employers through mobile-first job discovery,
+professional profiles, and source-attributed evidence analysis. Built for the
+City of Espoo use case, it combines a React interface, a FastAPI application,
+persistent SQLite storage, and a separately hosted MiniLM inference service.
 
-Use Python 3.11 or newer and Node.js 22.12 or newer. Run these commands from the repository root in PowerShell.
+[Open the application](https://recruitifi-recruitifi-demo.2.rahtiapp.fi/) ·
+[Local development](#local-development) · [AI analysis](#private-ai-evidence-analysis) ·
+[Deployment](#deployment) · [Validation](#validation)
 
-```powershell
-python -m venv backend/.venv
-backend/.venv/Scripts/python.exe -m pip install -r backend/requirements.txt
-backend/.venv/Scripts/python.exe -m backend.seed
-backend/.venv/Scripts/python.exe -m uvicorn backend.main:app --reload
+> **Shared demonstration environment.** The public deployment allows visitors to
+> select configured Talent, Employer, and Organizer accounts without a password.
+> Visitors can switch accounts and modify shared data. Use fictional profiles and
+> synthetic documents only; account selection does not establish private ownership.
+
+## Capabilities
+
+| Workspace | Capabilities |
+| --- | --- |
+| Talent | Maintain skills, documents and professional links; filter jobs by industry; swipe or use Interested / Rejected controls; analyze selected evidence; view hiring tasks and submit response links. |
+| Employer | Manage company requirements, select a job, explore anonymous candidate cards, shortlist Talent, review permitted evidence, and assign or verify hiring tasks. |
+| Espoo Organizer | Review booths that may need support and refresh employer eligibility information. |
+| Shared interface | Mobile touch gestures, centered reaction controls, keyboard navigation, undo, notifications, responsive layouts, and accessible loading/error states. |
+
+Discovery decisions are **company-level**: swiping one job applies the same choice
+to that company's other openings. Mutual interest creates a match notification;
+meeting acceptance remains subject to the existing eligibility and review checks.
+Notifications refresh after relevant actions and poll every 12 seconds while the
+Talent or Employer workspace is active.
+
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph Users["User workspaces"]
+        Talent["Talent: profile, evidence and job discovery"]
+        Employer["Employer: shortlist, shared findings and tasks"]
+        Organizer["Espoo Organizer: booth support"]
+    end
+
+    subgraph Rahti["CSC Rahti 2 / OpenShift"]
+        Route["Public HTTPS Route"]
+        Service["Application ClusterIP Service"]
+
+        subgraph App["RecruitiFi application · one replica · port 8080"]
+            UI["React / TypeScript frontend served by FastAPI"]
+            Session["Demo account session and CSRF checks"]
+            API["FastAPI: profiles, jobs, swipes, tasks and notifications"]
+            Worker["Bounded background evidence analysis"]
+            Extract["PDF text and saved descriptions"]
+            Retrieve["Validated, bounded public GitHub retrieval"]
+            Compare["Compare embeddings with existing skill requirements"]
+        end
+
+        PVC[("Persistent volume: /var/data
+SQLite profiles, uploaded documents, decisions and analysis results")]
+        Secrets["Kubernetes Secrets: signing, operator and model tokens"]
+        AIService["Private AI ClusterIP Service · bearer authentication"]
+        Model["MiniLM ONNX INT8 · CPU only
+Pinned local model and tokenizer · no runtime downloads"]
+    end
+
+    GitHub["Public GitHub REST API"]
+
+    Talent --> Route
+    Employer --> Route
+    Organizer --> Route
+    Route --> Service --> UI
+    UI -->|"Same-origin /api requests"| Session
+    Session --> API
+    API <-->|"Read and write"| PVC
+    API -->|"Queue approved evidence"| Worker
+    Worker --> Extract
+    Worker --> Retrieve
+    Retrieve -->|"Fixed api.github.com endpoints"| GitHub
+    Extract --> Compare
+    Retrieve --> Compare
+    Compare -->|"Text batches over private network"| AIService
+    AIService --> Model
+    Model -->|"Normalized embeddings"| Compare
+    Compare -->|"Source-attributed, unreviewed results"| PVC
+    API -->|"Status and permitted results"| UI
+    Secrets -.-> Session
+    Secrets -.-> Worker
+    Secrets -.-> AIService
 ```
 
-On macOS or Linux use `backend/.venv/bin/python` for the virtual environment executable.
+**How to explain the flow:** Visitors select a workspace through the HTTPS Route.
+FastAPI serves the interface and handles application requests. When Talent selects
+evidence and confirms permission, a background worker extracts bounded text or
+retrieves approved public GitHub content. The private MiniLM service returns
+embeddings; the application compares them with existing skill requirements and
+stores attributed results in SQLite. The frontend polls for status and displays
+permitted findings.
 
-In a second terminal, start the frontend.
+**Deployment boundaries:** The application and model run in separate containers.
+The model has no public Route, and its bearer token stays server-side. SQLite and
+uploaded documents live on the PVC so they survive application Pod recreation.
+Public demo account selection remains shared access; cookies and CSRF checks do
+not turn it into private identity authentication. LinkedIn pages are not fetched;
+the separate completion bonus is described below.
+
+
+| Layer | Implementation |
+| --- | --- |
+| Frontend | React 19, TypeScript, Vite 7, Tailwind CSS 4 |
+| Application | FastAPI, Uvicorn, Python 3.11+ |
+| Persistence | SQLite; uploaded files are stored as database BLOBs |
+| Extraction | Local PDF text extraction with `pypdf` |
+| Embeddings | `sentence-transformers/all-MiniLM-L6-v2`, ONNX INT8, CPU execution |
+| Hosting | CSC Rahti 2 / OpenShift; application and internal model service use separate images |
+
+The main production image serves the compiled frontend and API on port **8080**.
+Model weights are packaged into the separate AI image during its build. Runtime
+inference uses local artifacts and does not call external AI providers.
+
+## Local development
+
+### Requirements
+
+- Python 3.11 or newer for the application.
+- Node.js **22.12+**; the production build uses Node.js 22.
+- **pnpm 10.28.0**, matching the Docker build, and `frontend/pnpm-lock.yaml`.
+- Docker with linux/amd64 build support for optional container validation.
+- Prepared model artifacts and a separate model environment for AI-enabled use.
+
+Install the pinned package manager if it is not already available:
+
+```sh
+npm install --global pnpm@10.28.0
+```
+
+Run the following from the repository root on macOS or Linux:
+
+```sh
+python3 -m venv backend/.venv
+source backend/.venv/bin/activate
+python -m pip install -r backend/requirements.txt
+
+# Insert missing fictional records; preserve existing records with the same IDs.
+python -m backend.seed --add-only
+python -m backend.seed_jobs
+
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+In PowerShell, create the environment with `python -m venv backend/.venv` and
+activate it with `backend/.venv/Scripts/Activate.ps1`; the remaining Python
+commands are the same.
+
+In a second terminal:
 
 ```sh
 cd frontend
-pnpm install
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open the [event directory](http://localhost:5173/) or [interactive API docs](http://127.0.0.1:8000/docs). Run `pnpm build` from `frontend` to type-check and build the app.
+Open **http://localhost:5173/**. Local API documentation is available at
+**http://127.0.0.1:8000/docs**.
 
-## Local AI analysis with one account sign-in
+Vite proxies `/api` requests to port 8000. Keep `VITE_API_URL` empty for this
+same-origin setup so browser sessions and CSRF checks use the expected origin.
+The basic setup supports profile and discovery workflows; AI analysis and
+session-protected hiring tasks require the account/model configuration below.
 
-For the AI-enabled local demo, stop the plain Uvicorn command above and run:
+**Data initialization:** `backend.seed` without `--add-only` updates existing seed
+records. Do not use it to upgrade a populated event or a Rahti database. The
+optional `--include-practice` flag adds a larger fictional directory; it does not
+create additional selectable account aliases.
+
+### Run with the private model
+
+First prepare the isolated runtime and pinned artifacts using the
+[embedding service instructions](experiments/local_model/service/README.md).
+Benchmark background and Linux/amd64 measurements are in
+[the model experiment](experiments/local_model/README.md) and
+[the Linux/amd64 report](experiments/local_model/RESULTS_LINUX_AMD64.md).
+
+Stop the plain Uvicorn process, activate the backend environment, and run:
 
 ```sh
 python experiments/run_local_evidence.py
 ```
 
-Use a Python environment with the existing backend requirements installed. The
-launcher also requires the prepared model artifacts and existing virtual
-environment under `experiments/local_model/.venv`; it does not download or install
-anything. Keep the Vite frontend running on port 5173. The API binds to loopback
-port 8000 and the private model to loopback port 8081.
+Keep Vite running in the other terminal. The launcher starts the API on
+`127.0.0.1:8000` and the private model on `127.0.0.1:8081`. It requires the existing
+`experiments/local_model/.venv` and prepared model files; it performs no downloads
+or dependency installation. It reuses `backend/talentmatch.sqlite3` without
+resetting or reseeding it. Ctrl+C stops both services.
 
-The command prints the path to a private `account-passwords.txt` file outside
-Git. It configures distinct local passwords for `talent-001` through
-`talent-015`, `talent-ai-001`, `employer-001` through `employer-005`, and
-`organizer-001`: all 22 selectable accounts. Existing local passwords are retained;
-new accounts get distinct random passwords. These passwords are local only;
-existing Rahti credentials are unchanged. Verified-login mode requires a password
-for every role, including Organizer. Employer login alone grants no private AI sharing.
+The launcher maintains distinct local account passwords and signing/service
+secrets in a private temporary directory outside Git. It prints the credentials
+file location, retains existing passwords between runs, and does not change Rahti
+credentials. Model binaries, credentials and virtual environments belong outside Git.
 
-Refresh http://localhost:5173/ and sign in through the main account screen.
-Previously selected accounts must sign in again. Select your own supported
-materials, confirm permission, then click **Analyze My Profile**. No second AI
-login is needed. Employer sharing is off by default. Use fabricated evidence
-for testing; the launcher never submits existing documents automatically.
+To preview explicit password-free account selection locally:
 
-The profile analyzer accepts resources from all seven sections. Text-based CV,
-project, certificate and research PDFs provide document text. Other links use
-the saved title/description; PNG/JPEG uploads use descriptions without OCR.
-Each selected resource receives part of the bounded six-fragment text budget.
-Skills remain self-declared: edits invalidate cached AI results and the dashboard
-refreshes their status; re-run analysis to update evidence associations. Adding
-a skill without supporting evidence does not increase AI coverage scores.
+```sh
+TALENTMATCH_PASSWORD_FREE_DEMO=true python experiments/run_local_evidence.py
+```
 
-Public GitHub retrieval is enabled by default after existing owner consent.
-`TALENTMATCH_AI_FETCH_PUBLIC_PROFILES=0` explicitly disables profile retrieval;
-`1` enables it. This does not make private repositories public, change
-authentication, or grant Employer sharing.
+PowerShell equivalent:
 
-GitHub profile URLs retrieve the public bio and a bounded sample of up to three
-recent non-fork repository descriptions/languages using only `api.github.com`.
-Repository URLs still use the existing bounded file retriever. Metadata is not
-proof of authorship or proficiency. No GitHub token, clone or code execution is
-used. Profile and repository retrieval share the existing 30-second, 26-request,
-2 MB response and 100 KB decoded-text budget, with at most three sampled
-repositories total. No returned URLs or redirects are followed.
+```powershell
+$env:TALENTMATCH_PASSWORD_FREE_DEMO = "true"
+python experiments/run_local_evidence.py
+```
 
-A valid selected HTTPS LinkedIn /in/profile link adds a **+2-point profile-completion
-bonus** to completed job scores, capped at 100. LinkedIn pages are never fetched
-by profile analysis. No description is required for this bonus; it is not verified
-AI evidence. The raw MiniLM score stays unchanged. Cards show “combined fit” and
-explanations separate the evidence score from the bonus. Duplicate LinkedIn
-links do not stack. A LinkedIn-only selection cannot produce an AI analysis;
-include readable PDF/project/GitHub evidence. Failed inference yields no bonus score.
+This enables shared account selection while retaining server-issued cookies and
+CSRF checks. The optional reset and additional jobs remain a separate operation;
+starting the launcher does not apply them.
 
-Other websites remain metadata-only. Saved descriptions are an optional
-fallback and can be updated with **Add / edit analysis description**. Unreadable
-sources receive explicit notes. Retrieved GitHub text is held in memory only;
-stored results contain short attributed excerpts. Hosted GitHub retrieval requires
-permitted HTTPS egress to api.github.com. Up to 128 active jobs share a bounded
-six-fragment evidence sample and cached requirement embeddings.
+## Private AI evidence analysis
 
-API requests default to relative /api paths in development and production. Vite
-proxies development requests to loopback port 8000, preserving the signed session
-cookie. Use VITE_API_URL only with an explicitly configured compatible origin.
+The Talent panel labelled **Our Own Private Model** uses a privately hosted
+MiniLM service. Its pinned model revision is
+`1110a243fdf4706b3f48f1d95db1a4f5529b4d41`.
 
-The pulled hiring-task endpoints now require the signed account session, enforce
-owner scope, and require CSRF on writes; a selector header alone cannot access
-private submissions. Task loading failures do not prevent swipe cards from loading.
-The additive hiring_task_assignments table imports compatible historical hiring_tasks
-rows idempotently and preserves incompatible legacy task tables without deleting data.
+1. Add documents or links through **Documents & links**.
+2. Select up to three saved resources and confirm permission to analyze them.
+3. Optionally enable the existing Employer 001 sharing choice.
+4. Select **Analyze My Profile** and review the resulting job relevance and source details.
 
-PDF evidence must contain readable text, be unencrypted,
-and contain at most ten pages. Images/scanned PDFs have no OCR support. Validation,
-model outages, rate limits and interrupted jobs are shown as errors without
-invented scores. Job cards show the result; open a job's explanation to inspect
-attributed excerpts. Completed/failed analyses stop polling. If evidence or job
-requirements change, review the selection and analyze again explicitly.
+Analysis runs in bounded background workers. The interface polls while work is
+active and stops on terminal states or unmount. Changes to evidence, skill claims,
+or job requirements invalidate cached results and require an explicit new analysis.
 
-The launcher reuses the existing local `backend/talentmatch.sqlite3` and does
-not reset or reseed it. It keeps credentials between restarts in the printed
-private directory; Ctrl+C stops both services. This remains demo-account
-verification, not production identity authentication.
+### Supported evidence
 
-## Deploy the shared demo
-
-1. In the [Render dashboard](https://dashboard.render.com/), choose **New → Blueprint**, connect `Momo-Junction/RecruitiFi`, and select `main`.
-2. Enter a strong `TALENTMATCH_DEMO_PASSWORD` when prompted and review the cost of the paid web service and persistent disk before creating the resources.
-3. Open the HTTPS URL Render assigns. Sign in with username `demo` and the password you set. The same service hosts the UI and API. The first startup seeds synthetic data, and subsequent starts use the database on `/var/data`.
-4. Upload a synthetic PDF, download it, restart the service, and confirm it is still available. Check a swipe and undo, employer scoring, and the organizer view before sharing the URL.
-
-The shared password gives viewers access to all demo personas. Use synthetic documents for this deployment.
-
-## API and data
-
-Talent profiles have dedicated sections for CVs, projects, certificates, research, LinkedIn, GitHub and personal websites. Uploaded PDF, PNG and JPEG files (up to 10 MB each) and link metadata are stored in SQLite. Downloading a document returns it as an attachment.
-
-CV and portfolio availability are derived from saved materials. Skills linked to projects, research or submitted certificates receive the corresponding scoring tier. A submitted certificate has a reviewable attachment or URL, and its authenticity requires human review. Legacy seeded skill claims are treated as listed skills until supporting material is attached.
-
-The AI-enabled demo uses distinct password-verified accounts at the main account screen. Legacy password-free preview and shared API routes remain described below; they are not production authentication. Do not use real personal documents with the shared hackathon deployment.
-
-| Endpoint | Returns |
+| Material | Analysis behavior |
 | --- | --- |
-| `GET /api/skills` | Skill catalog with names, categories, and local ESCO-style URI placeholders |
-| `GET /api/companies` | Employer booths, working languages, relocation support, match thresholds, and weighted skill requirements |
-| `GET /api/candidates` | Synthetic candidate records with language levels and skill evidence |
-| `POST /api/match/simulate` | Scores a temporary candidate profile in memory |
-| `GET /api/companies/{company_id}/matches` | Scores and ranks all seeded candidates for an employer |
-| `POST /api/audit/metrics` | Recalculates current event metrics and records the calculation batch |
-| `GET /api/audit/calculations` | Lists recorded calculations, newest first, with cursor pagination |
+| CV, project, certificate or research PDF | Extracts readable text locally, without OCR. |
+| Project or other saved description | Uses the supplied title/description where supported. |
+| Public GitHub repository | Retrieves selected README, manifest and source files through the fixed GitHub API host. |
+| Public GitHub profile | Retrieves public biography and a bounded sample of recent non-fork repository metadata. |
+| LinkedIn profile | Adds the separately labelled completion bonus described below; profile pages are not fetched. |
+| Personal website or other external link | Uses saved metadata/descriptions; external pages are not fetched. |
+| PNG or JPEG upload | Uses the saved description; image contents are not analyzed. |
 
-The organizer dashboard averages scores across all saved candidate–company pairs. Its threshold filter rate divides the number of below-threshold pairs by the number of pairs that passed both dealbreakers. Temporary Talent simulations appear in the log and are excluded from event metrics. SQLite records the relevant input values, rule version, per-skill math, and outcome for calculations made through the app after audit logging is enabled.
+PDF extraction is limited to **10 pages**, **20,000 extracted characters**, and
+**10 MiB input**. A profile analysis accepts at most three materials totalling
+10 MiB and uses up to six bounded text fragments. Scanned, encrypted, malformed,
+or unreadable files produce explicit errors rather than fabricated evidence.
 
-The matching engine uses fixed rules. It reports dealbreakers separately from the numeric score and shows the points for each skill and profile proof. Improvement gains reflect the exact score increase for the action shown. Adding a missing skill with a certificate gives its full weight. Duplicate candidate skill entries use the strongest evidence.
+GitHub retrieval uses bounded requests, disables redirects, and never clones or
+executes repository code. Selection is limited to three repositories, 20 files,
+20,000 bytes per file, and 100,000 bytes of decoded text. Private repositories,
+blocked content and rate limits are reported explicitly. Retrieved repository text
+is not stored in full; results retain short attributed excerpts and source references.
 
-Rankings place candidates who pass the dealbreakers first, then sort by descending score and ascending candidate ID. The `meets_threshold` field checks the numeric employer threshold independently of the dealbreakers.
+The embedding service accepts batches of 1–3 strings with a maximum of 256 tokens
+per string. It uses one inference thread with bounded admission. Missing model
+files, unavailable services, overload and timeouts produce explicit failures.
 
-To simulate a match, send JSON like this to `POST /api/match/simulate`:
+### Interpreting results
 
-```json
-{
-  "company_id": 8,
-  "candidate": {
-    "has_cv": true,
-    "has_portfolio": false,
-    "languages": {"English": "B2"},
-    "needs_visa_sponsorship": false,
-    "skills": [{"skill_id": 3, "evidence_tier": "portfolio"}]
-  }
-}
-```
+- **AI evidence fit** is weighted semantic relevance between selected evidence and
+  existing job skill requirements. Findings remain **unreviewed**; percentages do
+  not establish proficiency, authorship, qualification or hiring probability.
+- A selected valid LinkedIn profile link adds **+2 profile-completion points** to
+  a completed score, capped at 100. The UI labels this **combined fit** and preserves
+  the original MiniLM score. Bonuses do not stack, and a LinkedIn link alone cannot
+  produce an evidence analysis.
+- Adding a self-declared skill does not verify it or automatically improve AI
+  evidence coverage. Analysis does not write detected skills into candidate claims.
+- The existing rule-based engine remains available for compatibility APIs and
+  operational eligibility. Language, visa/relocation rules and meeting thresholds
+  continue to use their existing checks.
 
-The seed script creates `backend/talentmatch.sqlite3`. Rerunning it updates the same demo records by ID. Skill requirements use `{skill_id, weight}` and total 70 for must-have skills and 20 for nice-to-have skills per company. Candidate skills use `{skill_id, evidence_tier}` with `self_declared`, `portfolio`, or `certificate`.
+Extraction, retrieval, embeddings and persistence are implemented under
+[`backend/evidence/`](backend/evidence/). The model service lives separately under
+[`experiments/local_model/service/`](experiments/local_model/service/).
 
-The `esco_uri` values are local identifiers for the demo. Candidate emails use `example.com`. The UI displays candidate codes while the demo API returns the full synthetic records.
+## Accounts and access modes
 
-Set `TALENTMATCH_DB` to use a different database file. The default CORS origins are `http://localhost:5173` and `http://127.0.0.1:5173`. Set `TALENTMATCH_CORS_ORIGINS` to a comma-separated list for other origins. Set `VITE_API_URL` in `frontend/.env` to point the frontend to a different API base URL.
-
-## Swipe discovery
-
-Talent and Employer views open with a swipe deck ranked by the existing matching engine (dealbreakers first, then score). Drag a card right to like or left to pass, use the action buttons, or focus a card and press the arrow keys. Shared skills are highlighted; missing skills and meeting blockers stay visible. Profile edits recalculate Talent recommendations. On mobile, discovery appears before the profile editor.
-
-Likes and passes persist in SQLite per demo candidate, company, and side. The Likes tab distinguishes pending interest from mutual likes. Undo restores the last swiped card. A mutual like records interest; meeting acceptance still follows the existing eligibility checks. Employer cards keep candidate identities anonymous.
-
-- `GET /api/swipes` reads saved demo decisions.
-- `PUT /api/swipes` upserts `{candidate_id, company_id, actor, decision}` (`actor`: `talent` or `employer`; `decision`: `like` or `pass`).
-- `DELETE /api/swipes/{actor}/{candidate_id}/{company_id}` undoes one side's decision.
-
-Restart the backend after upgrading; startup creates the swipe table without reseeding. These endpoints use the selected demo account's candidate/company IDs; this is not secure per-user authentication. Talent profile edits persist to that candidate; employer scores use saved profiles. Production use needs authenticated identity and access control. Decisions refresh immediately after a local action and poll every 12 seconds while a Talent or Employer dashboard is active.
-
-Run the isolated swipe API checks with `backend/.venv/bin/python -m unittest backend.test_swipes`.
-
-## Container and Rahti infrastructure
-
-See [the Rahti deployment runbook](deploy/rahti/README.md) for local container
-checks, persistence, manifests and backup/restore commands. The container serves
-the built frontend and API on port 8080, with SQLite at `/var/data/talentmatch.sqlite3`.
-Production frontend builds use same-origin `/api` requests; Vite development keeps
-the localhost API default. `/healthz` reports process health after startup.
-
-Hosted mode (`TALENTMATCH_HOSTED_DEMO=1`) protects the frontend, assets, API,
-documentation and downloads with HTTP Basic authentication: username `demo`,
-password from `TALENTMATCH_DEMO_PASSWORD` (a Kubernetes Secret on Rahti). Missing
-password configuration stops startup; invalid request credentials return 401.
-`/healthz` remains public for probes. Use HTTPS and synthetic information only;
-shared access is not a candidate account/ownership system. Local development is
-unchanged when hosted mode is unset or 0. Actual Rahti SCC, PVC and HTTPS operation
-still require a later authorized cluster test. Render deployment settings are in `render.yaml`.
-
-## Hackathon public access and Organizer suggestions
-
-Hosted authentication is enabled by default. Explicitly set
-`TALENTMATCH_DEMO_AUTH_ENABLED=false` for password-free public access; use `true`
-or omit it to require the existing shared password. Keep the Secret for later use.
-Public access also permits shared data changes and document access: synthetic data
-only. See [the hackathon runbook](deploy/rahti/README.md#optional-password-free-hackathon-mode)
-for safe update commands and a legitimate Organizer demonstration.
-
-A freshly seeded event has no saved proof materials, so legacy skills receive
-self-declared evidence and no CV/portfolio points. Scores remain below the seeded
-thresholds. Organizer suggestions require skill/language/visa eligibility and the
-employer threshold, not likes or swipes. Add supporting synthetic materials and
-refresh suggestions; do not lower thresholds to manufacture introductions.
-
-## Individual demo accounts and profile isolation
-
-At `/`, select Talent, Employer or Espoo Organizer, select an account, then click
-**Enter Dashboard**. The existing `/talent`, `/employer` and `/organizer` dashboards
-are reused. The header identifies the account and offers **Logout / Switch Account**.
-The personal profile selectors are removed; discovery still includes all eight
-companies and the existing anonymous candidate rankings.
-
-The single server mapping in `backend/demo_accounts.py` is identical locally and
-in the image. It looks up existing profiles without creating or updating records.
-`GET /api/demo/accounts` returns account names, availability and actual event counts.
-Missing profiles are explicitly unavailable, never replaced with another profile.
-An empty database does not trigger seeding through the account endpoint.
-
-| Talent account | Candidate ID | Seeded display name |
-| --- | --- | --- |
-| talent-001 | 402 | Aino Lehtinen |
-| talent-002 | 406 | Samir Haddad |
-| talent-003 | 411 | Nhi Tran |
-| talent-004 | 417 | Oskari Niemi |
-| talent-005 | 423 | Fatima Okafor |
-| talent-006 | 429 | Linnea Holm |
-| talent-007 | 432 | Mateo Rojas |
-| talent-008 | 438 | Iryna Kovalenko |
-| talent-009 | 445 | Joonas Salmi |
-| talent-010 | 451 | Priya Menon |
-| talent-011 | 458 | Elina Mäkinen |
-| talent-012 | 463 | Min-jun Park |
-| talent-013 | 470 | Sara Lindström |
-| talent-014 | 476 | Lina Benali |
-| talent-015 | 483 | Noah Weber |
-
-| Employer account | Company ID | Seeded display name |
-| --- | --- | --- |
-| employer-001 | 1 | Kide Quantum Labs |
-| employer-002 | 2 | Kallio Grid Energy |
-| employer-003 | 3 | Siltava Health Systems |
-| employer-004 | 4 | Ranta Cloud Works |
-| employer-005 | 5 | Luoto Digital Studio |
-
-`organizer-001` is **Espoo Organizer Admin**, with no candidate/company identity.
-Companies 6–8 remain unchanged and discoverable, with no Employer login accounts.
-Account display names are read from the current matching database records.
-
-One shared session in `sessionStorage` under `recruitifi.demoAccount` stores the
-account ID, role and candidate/company ID. Refresh validates that identity against
-the server catalog before mounting a dashboard. Old role-only sessions require
-account selection once after upgrading. Browser back/forward resolves to the
-currently selected role; logout clears the account. Account changes unmount the
-whole dashboard, abort reads and discard profile, directory, swipe and notification
-state before the next account mounts. With browser storage disabled, selection
-works in memory until refresh; refresh persistence requires sessionStorage.
-
-Frontend API requests send `X-Recruitifi-Demo-Account` and bypass browser response caching with `cache: no-store`. Client checks reject a
-mismatched profile/company ID, and the server independently checks the canonical
-mapping before profile/document operations, company edits/meeting acceptance,
-swipes/undo, or notification access. Candidate listing with this header returns
-only the Talent's own profile, or no personal candidate records for other roles;
-swipe listing returns only the selected profile's pairs. Anonymous matching
-responses do not contain documents, email or full names. Matching calculations,
-thresholds, Organizer eligibility, and notification rules are unchanged.
-
-**The legacy account selector alone is not secure authentication.** With
-`TALENTMATCH_VERIFIED_DEMO_LOGIN=1`, all selectable roles must also sign in to the
-server-verified session; AI and hiring-task routes enforce that session. The
-legacy selector header remains caller-selected
-and can be changed. Existing shared API calls without the header remain supported,
-and direct document links do not carry it. Anyone with demo access can choose any
-account or use shared API routes, including writes and document downloads. These
-checks prevent accidental cross-account UI edits; they do not protect real personal
-data. Use synthetic information only. The existing optional hosted Basic gate is
-unchanged and, when enabled, still requires the shared password before accessing
-accounts, APIs and downloads. No passwords or tokens are added to the account map.
-
-There are **no database/schema migrations** for accounts. Do not rerun the seed
-script on an existing event: it updates seed records. No PVC, Secret, environment,
-Dockerfile, or Kubernetes resource changes are required.
-
-To test locally, use the existing backend environment and two terminals:
-
-```sh
-# For a new disposable local event ONLY, not an existing/PVC database:
-DEMO_DATA_DIR=$(mktemp -d "${TMPDIR:-/tmp}/recruitifi-demo.XXXXXX")
-export TALENTMATCH_DB="$DEMO_DATA_DIR/event.sqlite3"
-backend/.venv/bin/python -m backend.seed
-backend/.venv/bin/python -m uvicorn backend.main:app --reload
-# Other terminal:
-cd frontend
-pnpm dev
-```
-
-Open http://localhost:5173. Select `talent-001`, confirm Aino's profile without a
-persona dropdown, edit a skill/upload a synthetic document and refresh. Log out;
-select `talent-002` and verify its own editor and empty/separate inbox. Test
-`employer-001`, then `employer-002`, confirming the company is fixed in each editor.
-Talent likes produce only the corresponding Employer Interested badge; Employer
-likes notify that Talent; both likes notify only the pair. Use another tab to test
-polling. Select `organizer-001` to verify the existing planner. Check direct URLs,
-back/forward and logout. Local tests use disposable SQLite files only.
-
-Validation commands:
-
-```sh
-backend/.venv/bin/python -m unittest discover -s backend -t . -p 'test_*.py' -v
-(cd frontend && npm test && npm run build)
-docker buildx build --platform linux/amd64 --load -t recruitifi:demo-accounts .
-python3 -B deploy/rahti/test_container.py recruitifi:demo-accounts
-```
-
-Rebuild/rollout instructions preserving the existing SQLite data are in
-[deploy/rahti/README.md](deploy/rahti/README.md#installing-individual-demo-accounts).
-
-## Interest indicators and notifications
-
-Incoming Talent likes show **Interested** on the matching Employer's candidate
-cards, including the queue and saved likes. They do not create Employer interest
-notifications. Employer likes create an interest notification for that Talent.
-When both current likes exist, each side receives **It's a Match!**; the earlier
-Talent interest alert is superseded. Compatibility scores and Organizer eligibility
-are unchanged: a mutual like is interest, not automatic meeting eligibility.
-
-The bell belongs to the logged-in demo candidate or company, not just the demo
-role. It shows active notifications, timestamps and unread counts, with individual
-Mark read controls. Active dashboards poll every 12 seconds and refresh immediately
-after local swipes, undo or read actions. Switching identities remounts the inbox;
-old requests are aborted. These frontend demo identities do not provide secure
-per-user authorization. Everyone with shared demo access can select another account after logout;
-use synthetic information only.
-
-Startup adds the `notifications` table and indexes using repeatable CREATE IF NOT
-EXISTS statements. Existing candidates, companies, skills, swipes and document
-BLOBs are not reset. Existing likes are backfilled on startup; their notification
-timestamp is the backfill time because legacy swipes have no timestamp. Active
-read/unread state is preserved across subsequent restarts.
-
-Each pair has at most one row per recipient/type. Repeated active likes preserve
-notification ID, timestamp and read state. Withdrawal or supersession marks rows
-inactive and removes them from active inboxes. Renewed interest reactivates the
-same row with a new timestamp and unread state. Stored history is bounded to the
-last activation per pair/recipient/type, not a full chronological activity log.
-Swipe writes/undo and notification reconciliation share one SQLite transaction;
-concurrent writers serialize with BEGIN IMMEDIATE. No new external service is used.
-
-API additions:
-
-- `GET /api/notifications/{recipient}/{identity_id}` returns active `entries` and
-  `unread_count`; recipient is `talent` (candidate ID) or `employer` (company ID).
-- `PUT /api/notifications/{recipient}/{identity_id}/{notification_id}/read` marks
-  an active scoped notification read and returns the refreshed inbox. Wrong
-  identity or inactive IDs return 404.
-- `PUT /api/swipes` retains its decision fields and adds `mutual_match` to the
-  response; `GET /api/swipes` remains the persisted decision list for badges.
-- Existing swipe DELETE also returns the remaining derived `mutual_match` state.
-
-Run backend tests with `backend/.venv/bin/python -m unittest discover -s backend
--t . -p 'test_*.py' -v`, and `npm test && npm run build` in frontend. The container
-checks also verify notification/read persistence across recreation alongside BLOB
-persistence. See the existing Rahti runbook for backup and a single-image update;
-never reseed or delete the PVC to install this additive migration.
-
-## Jobs, industries and job-specific rankings
-
-The existing Talent discovery now shows shared **job openings** with multi-select
-industry chips, **Clear Filters**, and an honest no-results state. Choices use OR
-filtering, apply only to active jobs, and persist per candidate in sessionStorage
-for the current browser session. They never change the logged-in account. The
-Employer dashboard adds **My Job Openings** with only that company's openings;
-selecting another job clears stale rankings and requests that job's scored queue.
-The existing profile editors, discovery cards, Interested badges and bells are reused.
-
-Canonical industry definitions (provided by the backend):
-
-| ID | Exact display label |
+| Account aliases | Mapping |
 | --- | --- |
-| it | IT |
-| business_services | Business (Services) |
-| logistics | Logistics |
-| health_sector | Health Sector |
-| restaurant | Restaurant |
-| cleaning | Cleaning |
-| engineering | Engineering |
+| `talent-001`–`talent-015` | Original 15 seeded Talent profiles; mappings are defined in `backend/demo_accounts.py`. |
+| `talent-ai-001` | Optional constant fictional AI test profile, candidate `900001`. |
+| `employer-001`–`employer-005` | Companies 1–5. Other companies remain discoverable. |
+| `organizer-001` | Espoo Organizer workspace. |
 
-`job_openings` is an additive SQLite table: stable integer `id`, existing
-`company_id` foreign key, title, canonical industry, description, weighted JSON
-`must_have_skills`/`nice_to_have_skills`, and `active`. Company/industry indexes and
-category/JSON/boolean constraints are created with `IF NOT EXISTS`. It uses the
-same `TALENTMATCH_DB` and needs no new volume or environment variable.
+The application reads account availability from SQLite. A missing profile is
+unavailable and is never silently replaced. Accounts, uploads and decisions are
+shared demonstration records, not independently verified real-user identities.
 
-**Startup creates the table but does not seed jobs.** After a backup, explicitly
-initialize only the new job records in an existing event:
+Password-free account entry requires the explicit
+`TALENTMATCH_PASSWORD_FREE_DEMO=true` setting. Password mode remains the default
+for configured account sessions. Signed cookies are HttpOnly, SameSite=Strict,
+Secure over HTTPS, and scoped to `/api`; write requests retain origin and CSRF
+validation. Switching access mode invalidates cookies issued in the other mode.
 
-```sh
-backend/.venv/bin/python -m backend.seed_jobs
-```
+The hosted HTTP Basic gate is a separate setting. Disabling it alone does not
+enable password-free AI sessions. Public mode lets anyone select any configured
+account, including an Employer with sharing access. Legacy shared API routes and
+caller-selected demo headers do not provide confidential account isolation.
 
-Use the same `TALENTMATCH_DB` as the application. On a fresh local event, run the
-existing base seed first, then this new initializer, then start Uvicorn/Vite as
-above. **Never run `backend.seed` to upgrade a populated event**: it upserts base
-profiles. `backend.seed_jobs` requires existing companies 1–5 and the existing
-catalog; it never creates candidates/companies or assigns candidate skills.
+**Real applicant data requires production identity, authorization, consent,
+retention and operational controls beyond this demonstration setup.** Keep operator
+and model-service tokens server-side; do not place them in React, Vite variables,
+browser storage, source control, or images.
 
-The explicit initializer inserts these **12 fictional hackathon openings**, not
-real vacancies. Employers 1–5 are the existing demo-account companies; all eight
-companies remain intact and participate in company discovery/Organizer matching.
+## Deployment
 
-| Job ID | Company ID / Employer | Opening | Industry |
-| --- | --- | --- | --- |
-| 1001 | 1 · Kide Quantum Labs | Quantum Software Developer | IT |
-| 1002 | 1 · Kide Quantum Labs | Quantum Hardware Engineer | Engineering |
-| 1003 | 1 · Kide Quantum Labs | Research Data Analyst | IT |
-| 2001 | 2 · Kallio Grid Energy | Energy Systems Engineer | Engineering |
-| 2002 | 2 · Kallio Grid Energy | Demo Equipment Logistics Coordinator | Logistics |
-| 3001 | 3 · Siltava Health Systems | Clinical Data Coordinator | Health Sector |
-| 3002 | 3 · Siltava Health Systems | Demo Facilities Cleaning Assistant | Cleaning |
-| 4001 | 4 · Ranta Cloud Works | Cloud Platform Engineer | IT |
-| 4002 | 4 · Ranta Cloud Works | Service Delivery Coordinator | Business (Services) |
-| 5001 | 5 · Luoto Digital Studio | Accessible Product Designer | IT |
-| 5002 | 5 · Luoto Digital Studio | Demo Event Catering Assistant | Restaurant |
-| 5003 | 5 · Luoto Digital Studio | Client Services Coordinator | Business (Services) |
+The CSC Rahti release verified on **15 November 2026**, commit **`54fe443`**, includes
+password-free account entry, the mobile-first UI, and **62 fictional jobs**: the
+12 initial openings plus 50 additional positions. The release performed a one-time
+Talent skill/swipe reset while preserving uploads, accounts and Employer decisions.
+The interface reads actual counts from the current database.
 
-See `backend/seed_jobs.py` for exact required/preferred weights. These sum to the
-existing 70/20 budgets. Existing skills are resolved by name. Six missing domain
-skills are inserted only if absent: Logistics Coordination, Inventory Control,
-Food Hygiene, Food Service, Commercial Cleaning, and Cleaning Safety. A fresh
-40-skill catalog becomes 46 skills. **No candidate claims these automatically**;
-low/zero required-skill scores for new sectors are expected until synthetic
-profiles are deliberately edited or supported with synthetic evidence.
-
-The initializer is transactional and insert-only. Re-running it inserts zero
-existing job IDs and preserves edited titles, weights, industries and inactive
-state. Reserved IDs belonging to another company, missing companies, or missing
-required existing skills cause a clear failure without overwriting event data.
-Names resolve to actual catalog IDs; identical base data yields identical jobs.
-There is no new job editing/creation interface or write API in this MVP.
-
-`JobOpening` implements the engine's existing `CompanyRequirements` inputs.
-Job scoring calls the unchanged `calculate_match` with the opening's skill groups
-and the **saved candidate profile**, including evidence derived from materials.
-Language, relocation support and threshold are inherited live from the existing
-company; they are not loosened. Ranking preserves the existing dealbreaker-first,
-score-descending, candidate-ID tie-break. Talent scores use the same adapter.
-For example, seeded Aino (402) leads job 1001, while Iryna (438) leads job 1002.
-Changing a job genuinely changes scoring inputs, not just the title.
-
-**Likes/pass decisions remain company-level.** All openings of a company share
-that Talent/Company pair's decisions, Interested state and mutual notifications.
-Swiping one job therefore removes that company's other openings from the unswiped
-Talent deck; **All jobs** still lists its active jobs. Saved likes still name the
-company. Changing filters or selected job never inserts/deletes a swipe or match.
-Job fit does not change Organizer suggestions or meeting eligibility: the existing
-company meeting endpoint and explicit human review remain in use. Job-ranked
-queue entries require that review before accepting a company-level conversation.
-The Company Quick Role Builder still edits the company profile; job skill groups
-remain separate snapshots, and are not overwritten by company edits.
-
-| New API | Result |
+| Resource | Deployment configuration |
 | --- | --- |
-| `GET /api/jobs/industries` | Seven canonical IDs/labels |
-| `GET /api/jobs` | All active job details, including inherited company requirements |
-| `GET /api/jobs?industry=it&industry=engineering` | OR filter; unknown IDs return 422 |
-| `GET /api/jobs?company_id=1` | Active public openings for one existing company |
-| `GET /api/jobs/{job_id}` | Job details; unknown ID returns 404 |
-| `GET /api/companies/{company_id}/jobs` | That Employer's own openings, including inactive jobs |
-| `GET /api/jobs/{job_id}/matches` | Anonymous candidate ranks for that opening |
-| `GET /api/candidates/{candidate_id}/job-matches` | That Talent's scores for all active jobs |
+| Main application | One replica; `Recreate` strategy; frontend and API on port 8080. |
+| Persistent database | `/var/data/talentmatch.sqlite3` on the existing PVC; uploaded documents remain in SQLite. |
+| Model service | Separate CPU-only Deployment and ClusterIP Service; no public Route. |
+| Public entry | OpenShift HTTPS Route with HTTP-to-HTTPS redirect. |
+| Runtime identity | Arbitrary non-root UID, read-only application filesystem, writable PVC and `/tmp`. |
+| Secrets | Server-side account, signing, operator and embedding credentials; retained when public access is enabled. |
 
-Existing API contracts are unchanged. New owned routes validate demo identity and
-reject mismatched account IDs when the demo header is supplied. This remains
-mock-account workflow separation, **not secure authentication**; public IDs and
-headerless shared API access are not confidential. Ranked discovery exposes no
-candidate names, email addresses, document metadata or document contents. Use
-synthetic data only. Hosted Basic/public mode remains unchanged.
+The existing deployment backup was retained on Rahti as requested; it was not
+downloaded. A backup on the same PVC shares the volume's failure risk. Follow an
+approved off-volume backup policy before treating this as a durable recovery plan.
 
-If no jobs have been explicitly initialized, Talent sees a clear empty state;
-Employer sees the existing company-level queue with an initialization notice.
-No company requirements are silently converted into fake job records.
+Start with the [Rahti runbook](deploy/rahti/README.md),
+[internal AI deployment guide](deploy/rahti/ai/README.md), and
+[public-demo preparation procedure](deploy/rahti/PUBLIC_DEMO_PREP.md).
+Some linked documents describe earlier preparation phases; the deployment snapshot
+above records the release verified for this README.
 
-Validation:
+The public-demo procedure uses `backend.demo_release` for an explicit, backed-up,
+transactional reset and job addition. A completion marker prevents repeated runs
+from erasing new activity or duplicating jobs. It is never invoked at startup.
+Do not reseed a populated deployment or delete the PVC to update the application.
+
+Build the main image locally:
 
 ```sh
-backend/.venv/bin/python -m unittest discover -s backend -t . -p 'test_*.py' -v
-(cd frontend && npm test && VITE_API_URL='' npm run build)
-docker buildx build --platform linux/amd64 --load -t recruitifi:jobs .
-python3 -B deploy/rahti/test_container.py recruitifi:jobs
+docker buildx build --platform linux/amd64 --load -t recruitifi:local .
 ```
 
-See [the safe Rahti update procedure](deploy/rahti/README.md#installing-industry-filters-and-job-rankings)
-for backup, additive migration, explicit job initialization and count verification.
-No deployment, commit or push is part of these local checks.
+The Dockerfile builds the frontend with the frozen pnpm lockfile and installs the
+backend requirements under the deployment constraints file. Keep model artifacts
+in the separate AI build context. Existing alternative Render configuration is
+retained in [`render.yaml`](render.yaml); the private AI service and its credentials
+require their own configuration.
 
-## Prepared public demo release (not deployed)
+### Configuration reference
 
-See [the public demo preparation runbook](deploy/rahti/PUBLIC_DEMO_PREP.md) for
-explicit password-free account sessions, a backed-up one-time Talent skills/likes
-reset, and 50 additional fictional jobs. Defaults retain password verification;
-no startup resets or automatic job insertion are introduced.
+| Variable | Purpose |
+| --- | --- |
+| `TALENTMATCH_DB` | SQLite path; defaults to the local backend directory, set to `/var/data/talentmatch.sqlite3` on Rahti. |
+| `TALENTMATCH_SERVE_FRONTEND` | `1` enables serving built frontend assets; set by the production image. |
+| `TALENTMATCH_HOSTED_DEMO` | `1` enables hosted-demo configuration. |
+| `TALENTMATCH_DEMO_AUTH_ENABLED` | Hosted Basic authentication: defaults to `true`; `false` explicitly disables the gate. |
+| `TALENTMATCH_DEMO_PASSWORD` | Hosted Basic password, required while that gate is enabled; obtain from a Secret. |
+| `TALENTMATCH_PASSWORD_FREE_DEMO` | Defaults to `false`; `true` permits public selection of configured accounts. |
+| `TALENTMATCH_VERIFIED_DEMO_LOGIN` | Set to `1` for the server-session account-entry flow. |
+| `TALENTMATCH_AI_DEMO_ACCOUNTS` | Secret JSON map of configured aliases to distinct demo passwords; retained in public mode. |
+| `TALENTMATCH_AI_SESSION_SECRET` | Independent server-side cookie-signing secret. |
+| `TALENTMATCH_AI_DEMO_TOKEN` | Server-only operator token for the evidence pipeline. |
+| `TALENTMATCH_AI_JOB_MATCHING` | `1` enables profile-to-job AI analysis. |
+| `TALENTMATCH_AI_CONSENTED_MODE` / `TALENTMATCH_AI_CANDIDATES` | Enable selected-material consent mode and define the operator-approved candidate allowlist. |
+| `TALENTMATCH_AI_SYNTHETIC_DEMO` / `TALENTMATCH_AI_SYNTHETIC_CANDIDATES` | Alternative explicitly synthetic analysis mode and allowlist. |
+| `TALENTMATCH_AI_EMPLOYER_ACCESS` | Server-side company/candidate sharing grants; explicit material consent also governs access. |
+| `TALENTMATCH_AI_FETCH_PUBLIC_PROFILES` | GitHub profile retrieval defaults to `1`; `0` disables it. |
+| `TALENTMATCH_EMBED_URL` / `TALENTMATCH_EMBED_INTERNAL_HOST` | Approved loopback or fixed internal embedding endpoint; Rahti uses `http://recruitifi-ai:8080/embed` and `recruitifi-ai`. |
+| `TALENTMATCH_EMBED_TOKEN` | Server-side bearer secret shared by the application and model service. |
+| `TALENTMATCH_PUBLIC_ORIGIN` | Exact trusted HTTPS application origin for hosted session/CSRF checks. |
+| `PORT` | Application listener port; the container launcher defaults to 8080. |
+
+See the deployment guides for complete combinations, Secret creation and rollback.
+Never copy production credentials into a frontend environment file.
+
+## Validation
+
+From an activated backend environment and the repository root:
+
+```sh
+python -m unittest discover -s backend -t . -p 'test_*.py'
+pnpm --dir frontend test
+VITE_API_URL='' pnpm --dir frontend build
+```
+
+The frontend build performs TypeScript validation before producing assets. On
+PowerShell, set `$env:VITE_API_URL = ""` before the build command.
+
+Optional browser checks require an existing Python Playwright installation,
+Chromium, and a running local Vite server:
+
+```sh
+python frontend/tests/mobile_ui_check.py
+```
+
+These checks mock all API traffic with synthetic data and cover touch controls,
+swipe versus scrolling, centered reactions, failed-save recovery, dropdowns,
+checkbox alignment, notifications, and startup retries at phone, tablet and desktop
+sizes. They do not modify the application's database.
+
+For synthetic analysis checks against the already configured local model:
+
+```sh
+python experiments/profile_analysis_e2e.py --password-free-demo
+```
+
+Set the loopback `TALENTMATCH_EMBED_URL` and server-side `TALENTMATCH_EMBED_TOKEN`
+in the test process first. The script creates a disposable database and never
+uses the application's candidate documents.
+
+The [CI workflow](.github/workflows/ci.yml) defines backend tests on Python 3.11
+and 3.13, frontend tests/build, and linux/amd64 container persistence checks. Its
+frontend job currently uses the checked-in npm lockfile; the Docker build uses
+the pnpm lockfile and version documented above.
+
+Container persistence and arbitrary-UID validation are described in
+[`deploy/rahti/test_container.py`](deploy/rahti/test_container.py) and the Rahti
+runbook. The latest deployed release passed 310 backend tests, 54 frontend tests,
+the production build, responsive Chromium touch checks, and a live analysis of
+the constant fictional project. This is demonstration validation; real production
+readiness requires a separate security and operational assessment.
+
+## Repository guide
+
+| Path | Responsibility |
+| --- | --- |
+| `frontend/src/` | Workspaces, swipe cards, profile forms, notifications and loading states. |
+| `frontend/tests/` | Frontend regression tests and optional synthetic browser checks. |
+| `backend/main.py` | FastAPI application, startup, health and static serving. |
+| `backend/database.py` / `backend/schema.sql` | SQLite connection handling and additive schema definitions. |
+| `backend/profile_materials.py` | Material metadata, uploads, downloads and profile skill updates. |
+| `backend/evidence/` | Extraction, GitHub retrieval, model client, analysis jobs, sessions and result storage. |
+| `backend/demo_release.py` | Explicit one-time public-demo data preparation. |
+| `experiments/local_model/` | Model preparation, benchmarks and separate inference service. |
+| `deploy/rahti/` | OpenShift manifests, deployment procedures and operational checks. |
+
+Keep feature changes scoped, run the relevant checks, and preserve existing event
+data. Commit application source and documentation only; keep credentials, SQLite
+files, uploaded documents, model binaries and local environments out of Git.
