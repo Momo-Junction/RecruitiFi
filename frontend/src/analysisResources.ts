@@ -28,3 +28,12 @@ export function sourceAnalysisNote(source:{content_status:string;detail?:string}
   if(source.content_status==='repository_files')return 'Selected public GitHub files.'
   return 'Extracted PDF text.'
 }
+
+/** Friendly display names only; saved titles and API category values stay intact. */
+export function materialDisplayName(material: SavedProfile['materials'][number]) {
+  const labels={cv:'CV',project:'Project',certificate:'Certificate',research:'Research',linkedin:'LinkedIn',github:'GitHub',website:'Personal website'}
+  const title=material.title.trim()
+  const generic=title.toLowerCase()
+  if(material.category==='cv' && ['cv','cv & résumé','cv & resume','résumé','resume'].includes(generic))return 'CV'
+  return !title || generic===material.category || generic===labels[material.category].toLowerCase() ? labels[material.category]:title
+}
