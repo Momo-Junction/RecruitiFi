@@ -274,7 +274,7 @@ export function EmployerWorkspace({ companyId, companies, skills, candidates, on
         <div className="talent-view-toggle" aria-label="Talent discovery mode">
           <button type="button" aria-pressed={view === 'swipe'} onClick={() => setView('swipe')}>Discover talent</button>
           <button type="button" aria-pressed={view === 'queue'} onClick={() => { setView('queue') }}>Eligible queue</button>
-          <button type="button" aria-pressed={view === 'shortlist'} onClick={() => setView('shortlist')}>Shortlisted ({shortlisted.length})</button>
+          <button type="button" aria-pressed={view === 'shortlist'} onClick={() => setView('shortlist')}>Short Listed ({shortlisted.length})</button>
         </div>
         {view === 'swipe' && <SwipeDeck side="employer" key={`${company.id}:${job?.id ?? 'company'}`} cards={cards} loading={!current || !swipeStore.ready} error={jobsError || swipeStore.error || (current?.failed ? 'Could not load candidate scores.' : '')}
           onRetry={() => { swipeStore.retry(); setAttempt((value) => value + 1) }}
@@ -283,7 +283,7 @@ export function EmployerWorkspace({ companyId, companies, skills, candidates, on
           saved={own.filter((row) => row.decision === 'like').map((row) => ({ id: row.candidate_id, name: current?.matches.find((match) => match.candidate_id === row.candidate_id)?.anonymous_code ?? 'Talent', mutual: likedBy.has(row.candidate_id), interested: likedBy.has(row.candidate_id) }))}
           onReview={() => { setShowAll(true); setView('queue') }} />}
         {view === 'shortlist' && <section className={panel} aria-labelledby="shortlist-heading">
-          <h2 id="shortlist-heading" className="text-xl font-bold">Shortlisted candidates</h2>
+          <h2 id="shortlist-heading" className="text-xl font-bold">Short Listed candidates</h2>
           {swipeStore.error ? <p role="alert" className="mt-3 text-sm">{swipeStore.error} <button type="button" className={link} onClick={swipeStore.retry}>Retry</button></p> :
             !swipeStore.ready ? <p role="status" className="mt-3 text-sm">Loading shortlist…</p> :
             shortlisted.length === 0 ? <p className="mt-3 text-sm">Shortlist a candidate from Discover talent to see them here.</p> :
